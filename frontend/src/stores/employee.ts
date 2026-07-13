@@ -1,0 +1,49 @@
+import { defineStore } from 'pinia'
+import { api } from '@/api/client'
+import type { Availability, Employee } from '@/types'
+
+interface State {
+  employees: Employee[]
+  loading: boolean
+}
+
+export const useEmployeeStore = defineStore('employee', {
+  state: (): State => ({ employees: [], loading: false }),
+  actions: {
+    async fetchAll() {
+      this.loading = true
+      try {
+        const { data } = await api.get<Employee[]>('/employees')
+        this.employees = data
+      } finally {
+        this.loading = false
+      }
+    },
+    async create(payload: Partial<Employee>) {
+      const { data } = await api.post<Employee>('/employees', payload)
+      this.employees.push(data)
+      return data
+    },
+    async update(id: number, payload: Partial<Employee>) {
+      const { data } = await api.patch<Employee>(`/employees/${id}`, payload)
+      const idx = this.employees.findIndex((e) => e.id === id)
+      if (idx >= 0) this.employees[idx] = data
+      return data
+    },
+    async remove(id: number) {
+      await api.delete(`/employees/${id}`)
+      this.employees = this.employees.filter((e) => e.id !== id)
+    },
+    async listAvailabilities(id: number): Promise<Availability[]> {
+      const { data } = await api.get<Availability[]>(`/employees/${id}/availabilities`)
+      return data
+    },
+    async createAvailability(payload: Omit<Availability, 'id'>): Promise<Availability> {
+      const { data } = await api.post<Availability>('/employees/availabilities', payload)
+      return data
+    },
+    async deleteAvailability(id: number) {
+      await api.delete(`/employees/availabilities/${id}`)
+    },
+  },
+})
