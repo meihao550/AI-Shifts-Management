@@ -9,10 +9,15 @@ services:
 
   workspace:
     build:
-      context: .
+      # Paths in this override file are resolved relative to the project
+      # directory (the workspace root), NOT relative to this file's location,
+      # because docker compose is invoked as
+      #   docker compose -f docker-compose.yml -f .devcontainer/docker-compose.yml
+      # from the project root. So use paths from the project root.
+      context: ./.devcontainer
       dockerfile: Dockerfile
     volumes:
-      - ..:/workspace:cached
+      - .:/workspace:cached
       # Share the host Docker socket so `docker compose` works inside.
       - /var/run/docker.sock:/var/run/docker.sock
     command: sleep infinity
