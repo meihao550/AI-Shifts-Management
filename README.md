@@ -135,5 +135,5 @@ AI-Shifts-Management/
 
 ## ライセンス
 
-MIT
+
 # AI-Shifts-Management
