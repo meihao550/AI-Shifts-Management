@@ -1,0 +1,26 @@
+services:
+  # Override backend/frontend so they don't auto-start when opening the
+  # devcontainer. Developers start them manually with `docker compose up
+  # backend frontend db` inside the workspace terminal when needed.
+  backend:
+    profiles: ["manual"]
+  frontend:
+    profiles: ["manual"]
+
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+      # Share the host Docker socket so `docker compose` works inside.
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: sleep infinity
+    environment:
+      # Allow the workspace container to reach the db service by name
+      POSTGRES_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
