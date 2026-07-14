@@ -3,26 +3,27 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Integer,
-    Numeric,
     String,
     UniqueConstraint,
     func,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 
-class EmployeeRole(str, Enum):
+class EmployeeRole(StrEnum):
     admin = "admin"
     employee = "employee"
 
@@ -59,21 +60,21 @@ class Employee(Base):
         nullable=False,
     )
 
-    user: Mapped["User | None"] = relationship(  # noqa: F821
+    user: Mapped[User | None] = relationship(  # noqa: F821
         "User", back_populates="employee", uselist=False
     )
-    availabilities: Mapped[list["EmployeeAvailability"]] = relationship(
+    availabilities: Mapped[list[EmployeeAvailability]] = relationship(
         "EmployeeAvailability",
         back_populates="employee",
         cascade="all, delete-orphan",
     )
-    assignments: Mapped[list["ShiftAssignment"]] = relationship(  # noqa: F821
+    assignments: Mapped[list[ShiftAssignment]] = relationship(  # noqa: F821
         "ShiftAssignment",
         back_populates="employee",
     )
 
 
-class AvailabilityKind(str, Enum):
+class AvailabilityKind(StrEnum):
     unavailable = "unavailable"  # 絶対勤務不可
     preferred = "preferred"  # 入りたい
 

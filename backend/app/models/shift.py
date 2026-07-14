@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import (
     Date,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Integer,
     String,
@@ -16,12 +15,15 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 
-class ShiftStatus(str, Enum):
+class ShiftStatus(StrEnum):
     draft = "draft"
     published = "published"
     finalized = "finalized"
@@ -54,7 +56,7 @@ class Shift(Base):
         nullable=False,
     )
 
-    assignments: Mapped[list["ShiftAssignment"]] = relationship(
+    assignments: Mapped[list[ShiftAssignment]] = relationship(
         "ShiftAssignment",
         back_populates="shift",
         cascade="all, delete-orphan",
@@ -84,6 +86,6 @@ class ShiftAssignment(Base):
     crosses_midnight: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     shift: Mapped[Shift] = relationship("Shift", back_populates="assignments")
-    employee: Mapped["Employee"] = relationship(  # noqa: F821
+    employee: Mapped[Employee] = relationship(  # noqa: F821
         "Employee", back_populates="assignments"
     )

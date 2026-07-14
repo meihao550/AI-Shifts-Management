@@ -17,8 +17,8 @@ TODO (先方確認事項):
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta
-from typing import Iterable
 
 from app.models.employee import Employee
 from app.models.shift import ShiftAssignment
@@ -39,20 +39,30 @@ def _assignment_intervals(a: ShiftAssignment) -> tuple[datetime, datetime]:
 
 
 def _overnight_hours(start: datetime, end: datetime) -> float:
-    """Hours worked within 22:00–翌 5:00."""
+    """Hours worked within the 22:00–翌 5:00 overnight band.
+
+    Within any calendar day the band splits into two sub-windows:
+    the early-morning tail ``[00:00, 05:00)`` (belonging to the previous
+    night) and the late-night head ``[22:00, 24:00)``. Both must be checked;
+    considering only ``[22:00, tomorrow 05:00)`` would miss early-morning
+    hours such as a 01:00–09:00 shift.
+    """
     total = 0.0
     cursor = start
     while cursor < end:
         day = cursor.date()
-        # Overnight window: 22:00 today → 05:00 tomorrow
-        night_start = datetime.combine(day, OVERNIGHT_START)
-        night_end = datetime.combine(day + timedelta(days=1), OVERNIGHT_END)
-        # Overlap
-        seg_start = max(cursor, night_start)
-        seg_end = min(end, night_end)
-        if seg_start < seg_end:
-            total += (seg_end - seg_start).total_seconds() / 3600.0
-        cursor = datetime.combine(day + timedelta(days=1), time.min)
+        day_end = datetime.combine(day + timedelta(days=1), time.min)
+        chunk_end = min(end, day_end)
+        windows = (
+            (datetime.combine(day, time.min), datetime.combine(day, OVERNIGHT_END)),
+            (datetime.combine(day, OVERNIGHT_START), day_end),
+        )
+        for w_start, w_end in windows:
+            seg_start = max(cursor, w_start)
+            seg_end = min(chunk_end, w_end)
+            if seg_start < seg_end:
+                total += (seg_end - seg_start).total_seconds() / 3600.0
+        cursor = day_end
     return total
 
 

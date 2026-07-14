@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import calendar
 import time as _time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, time
 from typing import Any
