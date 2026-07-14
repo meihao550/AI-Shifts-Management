@@ -4,6 +4,7 @@
   "service": "workspace",
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
+  "initializeCommand": "bash -c 'test -f .env || cp .env.example .env'",
   "forwardPorts": [5173, 8000, 5432],
   "portsAttributes": {
     "5173": { "label": "Frontend (Vite)", "onAutoForward": "notify" },

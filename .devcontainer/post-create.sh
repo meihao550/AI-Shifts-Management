@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Runs once after the devcontainer is created.
-set -euo pipefail
+# NOTE: set -e はあえて使わない。1 ステップ失敗してもコンテナ自体は残して手動修復可能に。
+set -uo pipefail
 
 echo "==> Installing backend Python dependencies..."
 cd /workspace/backend
-uv sync || pip install --user -e ".[dev]"
+if ! uv sync 2>&1; then
+  echo "   uv sync failed, falling back to pip"
+  pip install --user -e ".[dev]" || echo "   pip install も失敗。ターミナルで手動再試行してください。"
+fi
 
 echo "==> Installing frontend Node dependencies..."
 cd /workspace/frontend

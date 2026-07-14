@@ -22,7 +22,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shifts}:${POSTGRES_PASSWORD:-shifts_password}@db:5432/${POSTGRES_DB:-shifts_db}
     depends_on:
