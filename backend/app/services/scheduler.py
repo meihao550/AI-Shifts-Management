@@ -197,9 +197,29 @@ class ShiftScheduler:
                 if (eid, d, p.id) in x:
                     bonus_terms.append(x[(eid, d, p.id)])
 
-        # Objective: minimize deviation from weekly target, reward preferences
-        if penalties or bonus_terms:
-            model.Minimize(sum(penalties) - 3 * sum(bonus_terms))
+        # Soft main_shift_type bonus:
+        # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
+        # 一致した割当 1 個ごとに +1 のボーナス。
+        main_shift_bonus_terms: list[cp_model.IntVar] = []
+        for e in emps:
+            if not e.main_shift_type:
+                continue
+            for d in days:
+                for p in pats:
+                    if p.code == e.main_shift_type or p.category == e.main_shift_type:
+                        main_shift_bonus_terms.append(x[(e.id, d, p.id)])
+
+        # Objective: minimize deviation from weekly target, reward preferences and main_shift matches.
+        # main_shift の重みは preference より強く (weight=5) して、可能な限り希望シフトに近づける。
+        obj = 0
+        if penalties:
+            obj += sum(penalties)
+        if bonus_terms:
+            obj -= 3 * sum(bonus_terms)
+        if main_shift_bonus_terms:
+            obj -= 5 * sum(main_shift_bonus_terms)
+        if penalties or bonus_terms or main_shift_bonus_terms:
+            model.Minimize(obj)
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.max_solve_seconds
