@@ -24,6 +24,27 @@ async function loginDev() {
     message.error(`ログインに失敗しました: ${(e as Error).message}`)
   }
 }
+
+async function seed() {
+  try {
+    const res = await fetch(`${apiBase}/api/dev/seed`, { method: 'POST' })
+    if (!res.ok) throw new Error(await res.text())
+    message.success('サンプルデータを投入しました')
+  } catch (e) {
+    message.error(`投入失敗: ${(e as Error).message}`)
+  }
+}
+
+async function reset() {
+  if (!window.confirm('全データを削除して 25 名分のサンプルを再投入します。よろしいですか？')) return
+  try {
+    const res = await fetch(`${apiBase}/api/dev/reset`, { method: 'POST' })
+    if (!res.ok) throw new Error(await res.text())
+    message.success('リセット完了')
+  } catch (e) {
+    message.error(`リセット失敗: ${(e as Error).message}`)
+  }
+}
 </script>
 
 <template>
@@ -47,9 +68,16 @@ async function loginDev() {
         </NFormItem>
       </NForm>
       <NButton block @click="loginDev">開発用ログイン (dev only)</NButton>
+      <NButton block secondary style="margin-top: 8px" @click="seed">
+        サンプルデータ投入 (25 名分)
+      </NButton>
+      <NButton block secondary type="warning" style="margin-top: 8px" @click="reset">
+        データ全リセット + サンプル再投入
+      </NButton>
       <p class="hint">
         本番環境では利用不可。 <br />
-        初回にログインしたユーザは自動的に <b>管理者</b> になります。
+        初回にログインしたユーザは自動的に <b>管理者</b> になります。 <br />
+        「サンプルデータ投入」を押すと従業員 25 名 + シフトパターン + 必要人員が入ります。
       </p>
     </NCard>
   </div>
