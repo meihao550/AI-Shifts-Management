@@ -69,11 +69,46 @@ async def generate_shift(
 ):
     employees = list(db.execute(select(Employee).where(Employee.active.is_(True))).scalars())
     if not employees:
-        raise HTTPException(status_code=400, detail="有効な従業員がいません")
+        raise HTTPException(
+            status_code=400,
+            detail="有効な従業員がいません。従業員管理画面から追加してください。",
+        )
 
     patterns = list(db.execute(select(ShiftPattern)).scalars())
     if not patterns:
-        raise HTTPException(status_code=400, detail="シフトパターンが未定義です (ルール設定画面)")
+        # Auto-seed defaults so first-time users can generate immediately.
+        from datetime import time as _time
+
+        db.add_all(
+            [
+                ShiftPattern(
+                    code="morning",
+                    label="朝 09:00-17:00",
+                    start_time=_time(9, 0),
+                    end_time=_time(17, 0),
+                    is_basic=True,
+                    category="morning",
+                ),
+                ShiftPattern(
+                    code="evening",
+                    label="夜 17:00-01:00",
+                    start_time=_time(17, 0),
+                    end_time=_time(1, 0),
+                    is_basic=True,
+                    category="evening",
+                ),
+                ShiftPattern(
+                    code="night",
+                    label="深夜 01:00-09:00",
+                    start_time=_time(1, 0),
+                    end_time=_time(9, 0),
+                    is_basic=True,
+                    category="night",
+                ),
+            ]
+        )
+        db.commit()
+        patterns = list(db.execute(select(ShiftPattern)).scalars())
 
     staffing_rows = list(db.execute(select(StaffingRule)).scalars())
     staffing_map: dict[tuple[str, str], int] = {
@@ -91,6 +126,24 @@ async def generate_shift(
         }
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
+
+    max_daily_demand = max(
+        staffing_map.get(("weekday", "morning"), 0)
+        + staffing_map.get(("weekday", "evening"), 0)
+        + staffing_map.get(("weekday", "night"), 0),
+        staffing_map.get(("weekend_or_holiday", "morning"), 0)
+        + staffing_map.get(("weekend_or_holiday", "evening"), 0)
+        + staffing_map.get(("weekend_or_holiday", "night"), 0),
+    )
+    if len(employees) < max_daily_demand:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"必要人員 (1 日最大 {max_daily_demand} 名) に対して有効な従業員が "
+                f"{len(employees)} 名しかいません。従業員を追加するか、"
+                "ルール設定で必要人員を減らしてください。"
+            ),
+        )
 
     llm_result: dict = {}
     if payload.use_llm and payload.natural_language_note:

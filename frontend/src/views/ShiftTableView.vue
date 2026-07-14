@@ -20,6 +20,7 @@ import { useShiftStore } from '@/stores/shift'
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
 import type { AvailabilityKind } from '@/types'
+import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 
 const shiftStore = useShiftStore()
 const employeeStore = useEmployeeStore()
@@ -73,13 +74,30 @@ const patternOptions = computed(() =>
   ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
 )
 
+const shiftTypeLabels: Record<string, string> = {
+  morning: '朝',
+  evening: '夜',
+  night: '深夜',
+}
+
+function shiftTypeLabel(code: string): string {
+  return shiftTypeLabels[code] ?? code
+}
+
+function isoLocalDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function assignmentsFor(employeeId: number, date: Date): string {
   if (!shift.value) return ''
-  const iso = date.toISOString().slice(0, 10)
+  const iso = isoLocalDate(date)
   return (
     shift.value.assignments
       .filter((a) => a.employee_id === employeeId && a.target_date === iso)
-      .map((a) => a.shift_type)
+      .map((a) => shiftTypeLabel(a.shift_type))
       .join(', ') || ''
   )
 }
@@ -173,6 +191,10 @@ function goPrint() {
       </NSpace>
     </NCard>
 
+    <NCard title="休日・希望日カレンダー">
+      <AvailabilityCalendar :year="year" :month="month" />
+    </NCard>
+
     <NCard title="AIシフト生成">
       <p style="margin-top: 0; color: #6b7080">
         今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT
@@ -196,7 +218,13 @@ function goPrint() {
     <NCard title="シフト表">
       <template #header-extra>
         <NTag v-if="shift" :type="shift.status === 'finalized' ? 'success' : 'default'">
-          {{ shift.status }}
+          {{
+            shift.status === 'finalized'
+              ? '確定済み'
+              : shift.status === 'published'
+                ? '公開中'
+                : 'ドラフト'
+          }}
         </NTag>
       </template>
       <NSpin :show="loading || shiftStore.generating">

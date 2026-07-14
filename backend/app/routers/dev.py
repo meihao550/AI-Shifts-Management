@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.employee import Employee
+from app.models.employee import Employee, EmployeeAvailability
 from app.models.rule import DayCategory, ShiftPattern, StaffingRule
+from app.models.shift import Shift, ShiftAssignment
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 settings = get_settings()
@@ -98,3 +99,17 @@ def seed(db: Annotated[Session, Depends(get_db)]):
 
     db.commit()
     return {"status": "seeded"}
+
+
+@router.post("/reset")
+def reset(db: Annotated[Session, Depends(get_db)]):
+    """Drop shifts, availabilities, employees, staffing, patterns — then reseed."""
+    _require_dev()
+    db.query(ShiftAssignment).delete()
+    db.query(Shift).delete()
+    db.query(EmployeeAvailability).delete()
+    db.query(StaffingRule).delete()
+    db.query(ShiftPattern).delete()
+    db.query(Employee).delete()
+    db.commit()
+    return seed(db)

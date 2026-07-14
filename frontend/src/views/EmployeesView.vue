@@ -39,9 +39,21 @@ const columns: DataTableColumns<Employee> = [
   { title: '年齢', key: 'age', width: 80 },
   { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
   { title: '交通費/日', key: 'transport_cost', width: 100, render: (r) => `¥${r.transport_cost}` },
-  { title: 'メインシフト', key: 'main_shift_type', width: 100 },
+  {
+    title: 'メインシフト',
+    key: 'main_shift_type',
+    width: 100,
+    render: (r) =>
+      ({ morning: '朝', evening: '夜', night: '深夜' })[r.main_shift_type ?? ''] ??
+      (r.main_shift_type ?? '-'),
+  },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
-  { title: 'ロール', key: 'role', width: 90 },
+  {
+    title: 'ロール',
+    key: 'role',
+    width: 90,
+    render: (r) => (r.role === 'admin' ? '管理者' : '一般'),
+  },
   { title: '在籍', key: 'active', width: 70, render: (r) => (r.active ? '○' : '×') },
   {
     title: '操作',
