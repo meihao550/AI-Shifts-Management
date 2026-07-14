@@ -1,99 +1,150 @@
 # AI-Shifts-Management
 
-生成AI（LLM）と OR-tools CP-SAT による制約プログラミングを組み合わせた、シフト自動作成・人件費計算 Web アプリケーションです。
+生成 AI（LLM）と OR-tools CP-SAT による制約プログラミングを組み合わせた、シフト自動作成 / 人件費計算 Web アプリです。
 
-## 機能概要
+- **本番環境**: https://ai-shifts-frontend-1032481076647.asia-northeast1.run.app （デプロイ済み）
+- **企画書**: [`docs/Project.pdf`](docs/Project.pdf)
+- **チュートリアル（初心者向け）**: [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
+- **デプロイ手順**: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
+- **開発ルール**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+
+---
+
+## 機能
 
 | ID | 機能 | 概要 |
 |---|---|---|
 | F-1 | AI シフト自動生成 | LLM が自然言語の追加事情（イベント、有休など）を JSON 制約に変換し、CP-SAT が全体最適化してシフトを出力 |
 | F-2 | 人件費自動計算 | 深夜割増を含む人件費計算、月間労働時間に応じた社会保険/雇用保険の適用判定 |
-| F-3 | 従業員管理 | 名前・年齢・交通費・メインシフト・週勤務回数などの詳細管理 |
-| F-4 | ルール設定 | 曜日別必要人員数、シフトパターン、割増率などの設定 |
-| F-5 | PDF/Excel 出力 | 印刷プレビュー画面から PDF・Excel でシフト表を出力 |
-| F-6 | 認証 | Google Workspace OAuth（社員/管理者ロール） |
+| F-3 | 従業員管理 | 名前・年齢・交通費・時給・週勤務回数などの管理 |
+| F-4 | ルール設定 | 曜日別必要人員数、シフトパターンの設定 |
+| F-5 | PDF / Excel 出力 | 印刷プレビュー画面から出力 |
+| F-6 | 認証 | Google Workspace OAuth（管理者/一般ロール） |
+
+---
+
+## アーキテクチャ
+
+```
+┌────────────┐   HTTPS   ┌──────────────┐          ┌──────────────┐
+│ ブラウザ   │ ────────▶ │ Cloud Run    │  psycopg │ Supabase     │
+│ (Vue 3)    │           │ (FastAPI)    │ ───────▶ │ PostgreSQL   │
+└────────────┘           └──────┬───────┘          └──────────────┘
+                                │
+                                │ HTTPS
+                                ▼
+                    ┌─────────────────────┐
+                    │ Anthropic / OpenAI  │
+                    │ (LLM API)           │
+                    └─────────────────────┘
+```
+
+---
 
 ## 技術スタック
 
-| レイヤ | 技術 |
-|---|---|
-| Frontend | Vue 3 + TypeScript + Vite + Vue Router + Pinia + Naive UI |
-| Backend  | FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic |
-| Optimize | OR-tools CP-SAT |
-| LLM      | Anthropic Claude または OpenAI（`.env` で切替） |
-| DB       | PostgreSQL 16 |
-| 認証     | Google OAuth 2.0 + JWT |
-| 開発     | Docker Compose / uv / npm / Ruff / mypy / ESLint / Prettier / Vitest / Pytest |
-| デプロイ | GCP (Cloud Run + Cloud SQL) + Terraform 雛形 |
+| レイヤ | 技術 | 選定理由 |
+|---|---|---|
+| **フロント** | Vue 3 + TypeScript + Vite | リアクティブな表 UI に強い / 型安全 / ビルドが速い |
+| 状態管理 | Pinia | Vue 公式、Composition API と親和性が高い |
+| UI ライブラリ | Naive UI | 表 / カレンダーが揃っていて日本語対応 |
+| **バックエンド** | FastAPI + Pydantic v2 | OpenAPI 自動生成、型検証、非同期対応 |
+| ORM | SQLAlchemy 2 + Alembic | Python 標準、マイグレーション自動化 |
+| **DB** | PostgreSQL 16（Supabase） | Free 枠で運用可、SQL 標準 |
+| **最適化** | OR-tools CP-SAT | シフトスケジューリング問題向け国産級ソルバ |
+| **LLM** | Anthropic Claude または OpenAI | `.env` で切替、自然言語 → JSON 制約変換 |
+| **認証** | Google OAuth 2.0 + JWT | Workspace ドメインで絞り込み可能 |
+| **開発環境** | Dev Container (VS Code) | Python / Node / Terraform / gcloud すべて統一 |
+| **CI / Lint** | Ruff + mypy + ESLint + Prettier + Vitest + Pytest | 自動整形と型検証 |
+| **デプロイ** | Cloud Run + Terraform | サーバレスで無料枠内、コード管理化 |
 
-## クイックスタート（Docker Compose）
+---
 
-```bash
-# 1. リポジトリ直下で .env を作成
-cp .env.example .env
+## クイックスタート（Dev Container）
 
-# 2. .env の以下を設定
-# - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / ALLOWED_GOOGLE_DOMAIN
-# - ANTHROPIC_API_KEY もしくは OPENAI_API_KEY
-# - SECRET_KEY （openssl rand -hex 32 で生成）
+**チームで環境差ゼロにするため、Dev Container を推奨します。**
 
-# 3. 起動
-docker compose up --build
-```
+### 必要なもの
 
-- Frontend: http://localhost:5173
-- Backend (Swagger UI): http://localhost:8000/docs
-- PostgreSQL: localhost:5432
+- [VS Code](https://code.visualstudio.com/)
+- [Dev Containers 拡張](vscode:extension/ms-vscode-remote.remote-containers)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)（起動しておく）
 
-初回起動時に Alembic が自動的に `alembic upgrade head` を実行し、シードデータ用エンドポイント `POST /api/dev/seed` から開発用データを投入できます（`ENVIRONMENT=development` のときのみ有効）。
+### 手順
 
-## 手動起動（Docker を使わない場合）
-
-### バックエンド
-
-```bash
-cd backend
-uv sync            # pyproject.toml から依存を解決
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-```
-
-### フロントエンド
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## ユーザーが自分で行う必要のある設定
-
-以下は本アプリを本番運用するために **人手が必要な設定** です。
-
-1. **Google Cloud Console**
-   - OAuth 2.0 クライアント ID の発行 (`Web application`)
-   - リダイレクト URI に `http://localhost:8000/api/auth/google/callback`（開発）と本番 URL を登録
-   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を `.env` に設定
-   - Google Workspace ドメインで制限したい場合は `ALLOWED_GOOGLE_DOMAIN=example.co.jp`
-2. **LLM API キー**
-   - Anthropic を使う場合: https://console.anthropic.com/ で API キー発行 → `ANTHROPIC_API_KEY`
-   - OpenAI を使う場合: https://platform.openai.com/ で API キー発行 → `OPENAI_API_KEY`
-   - `LLM_PROVIDER=anthropic` または `openai` を選択
-3. **SECRET_KEY** の生成
+1. リポジトリを clone してVS Code で開く
    ```bash
-   openssl rand -hex 32
+   git clone https://github.com/meihao550/AI-Shifts-Management.git
+   code AI-Shifts-Management
    ```
-   を `.env` の `SECRET_KEY` に設定。
-4. **初期管理者ユーザー**
-   - 初回起動後、DB に登録される 1 人目のユーザーは自動的に `admin` ロールになります（`app/routers/auth.py` 参照）。
-   - 追加ユーザーは 初期状態は `employee`。管理者が管理画面（従業員管理）から昇格可能。
-5. **本番環境変数**
-   - `ENVIRONMENT=production` に変更
-   - `FRONTEND_ORIGIN` と `GOOGLE_REDIRECT_URI` を本番の HTTPS URL に更新
-   - PostgreSQL は Cloud SQL 等マネージド DB を推奨
-6. **人件費計算ロジック確認**
-   - 深夜割増率・割増賃金は法定 25% 以上（22:00–翌 5:00）で計算。
-   - 有給・交通費の月次組み込み方法は運用ポリシーが未確定のため、`backend/app/services/payroll.py` の TODO コメントに沿って先方に確認の上、必要に応じて修正してください。
+2. VS Code の右下に「Reopen in Container」通知が出るのでクリック
+   （出ない場合は `Cmd+Shift+P` → **Dev Containers: Reopen in Container**）
+3. 初回はコンテナビルドで 5〜10 分。完了後、ターミナルはコンテナ内に接続されます
+4. 起動：
+   ```bash
+   # ターミナル 1: バックエンド
+   cd backend
+   uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+   # ターミナル 2: フロントエンド
+   cd frontend
+   npm run dev -- --host 0.0.0.0
+   ```
+5. ブラウザで http://localhost:5173 を開く
+
+**DB は Dev Container の `db` サービスとして自動起動**するので、追加の設定なしで動きます。
+
+---
+
+## 環境変数
+
+- **開発**: `.env.example` をコピーして `.env` を作成し、必要に応じて編集
+- **本番**: `deploy/DEPLOY.md` を参照
+
+`.env` に書く主な項目：
+
+| 変数 | 用途 | 例 |
+|---|---|---|
+| `SECRET_KEY` | JWT 署名鍵 | `openssl rand -hex 32` で生成 |
+| `DATABASE_URL` | Postgres 接続 | `postgresql+psycopg://shifts:shifts_password@db:5432/shifts_db` |
+| `GOOGLE_CLIENT_ID` | OAuth | Cloud Console で発行 |
+| `GOOGLE_CLIENT_SECRET` | OAuth | 同上 |
+| `LLM_PROVIDER` | LLM 切替 | `anthropic` / `openai` |
+| `ANTHROPIC_API_KEY` | Claude 用 | https://console.anthropic.com/ |
+| `OPENAI_API_KEY` | OpenAI 用 | https://platform.openai.com/ |
+
+---
+
+## 開発コマンド
+
+```bash
+# ─── バックエンド ───
+cd backend
+uv run pytest                    # テスト
+uv run ruff check .              # Lint
+uv run ruff format .             # Format
+uv run mypy app                  # 型チェック
+uv run alembic upgrade head      # マイグレーション適用
+uv run alembic revision --autogenerate -m "message"  # マイグレーション生成
+
+# ─── フロントエンド ───
+cd frontend
+npm run test:unit                # テスト
+npm run lint                     # Lint + Fix
+npm run format                   # Prettier 整形
+npm run build                    # 本番ビルド (型チェック含む)
+```
+
+### pre-commit フック（推奨）
+
+コミット前に自動で lint/format が走ります。
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+---
 
 ## テスト
 
@@ -105,10 +156,23 @@ cd backend && uv run pytest
 cd frontend && npm run test:unit
 ```
 
+---
+
+## デプロイ
+
+本番デプロイの詳細手順は [`deploy/DEPLOY.md`](deploy/DEPLOY.md) を参照。
+
+- **推奨構成**: Supabase (Postgres) + Cloud Run (backend / frontend) — **月額 ¥0**（無料枠内）
+- 予算アラート ¥100/月 で自動通知（Cloud Billing）
+
+---
+
 ## ディレクトリ構成
 
 ```
 AI-Shifts-Management/
+├── .devcontainer/    Dev Container 定義（VS Code）
+├── .github/          GitHub Actions ワークフロー
 ├── backend/          FastAPI + CP-SAT
 │   ├── app/
 │   │   ├── auth/     Google OAuth + JWT
@@ -116,8 +180,8 @@ AI-Shifts-Management/
 │   │   ├── models/   SQLAlchemy モデル
 │   │   ├── schemas/  Pydantic スキーマ
 │   │   ├── routers/  API エンドポイント
-│   │   └── services/ CP-SAT / LLM / 人件費
-│   ├── alembic/      マイグレーション
+│   │   └── services/ CP-SAT / LLM / 人件費 / 出力
+│   ├── alembic/      DB マイグレーション
 │   └── tests/
 ├── frontend/         Vue3 + Naive UI
 │   └── src/
@@ -127,13 +191,24 @@ AI-Shifts-Management/
 │       ├── views/    画面
 │       └── components/
 ├── deploy/
-│   └── terraform/    GCP 用 Terraform 雛形
+│   ├── DEPLOY.md     デプロイ手順書
+│   └── terraform/    Cloud Run + Secret Manager
+├── docs/
+│   ├── Project.pdf   企画書
+│   └── TUTORIAL.md   初心者向けチュートリアル
 ├── docker-compose.yml
-├── .env.example
-└── docs/Project.pdf  企画書
+└── .env.example
 ```
+
+---
+
+## 貢献 / チーム開発
+
+- 開発フロー・PR ルール・コミット規約は [`CONTRIBUTING.md`](CONTRIBUTING.md) を必ず読んでください
+- 初めての人向けの学習ガイドは [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
+
+---
 
 ## ライセンス
 
-
-# AI-Shifts-Management
+MIT
