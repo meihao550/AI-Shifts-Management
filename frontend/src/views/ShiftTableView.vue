@@ -91,15 +91,27 @@ function isoLocalDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-function assignmentsFor(employeeId: number, date: Date): string {
-  if (!shift.value) return ''
+interface AssignmentCell {
+  label: string
+  mainMismatch: boolean
+}
+
+function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
+  if (!shift.value) return { label: '', mainMismatch: false }
   const iso = isoLocalDate(date)
-  return (
-    shift.value.assignments
-      .filter((a) => a.employee_id === employeeId && a.target_date === iso)
-      .map((a) => shiftTypeLabel(a.shift_type))
-      .join(', ') || ''
+  const emp = employeeStore.employees.find((e) => e.id === employeeId)
+  const mainType = emp?.main_shift_type ?? null
+
+  const matches = shift.value.assignments.filter(
+    (a) => a.employee_id === employeeId && a.target_date === iso,
   )
+  if (matches.length === 0) return { label: '', mainMismatch: false }
+
+  const mainMismatch = !!mainType && matches.some((a) => a.shift_type !== mainType)
+  return {
+    label: matches.map((a) => shiftTypeLabel(a.shift_type)).join(', '),
+    mainMismatch,
+  }
 }
 
 function cellStyle(date: Date) {
@@ -246,12 +258,28 @@ function goPrint() {
             <tbody>
               <tr v-for="emp in employeeStore.employees" :key="emp.id">
                 <td class="fixed">{{ emp.name }}</td>
-                <td v-for="d in days" :key="d.getTime()" class="cell">
-                  {{ assignmentsFor(emp.id, d) }}
-                </td>
+                <template v-for="d in days" :key="d.getTime()">
+                  <td
+                    class="cell"
+                    :class="{ 'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch }"
+                    :title="
+                      assignmentsFor(emp.id, d).mainMismatch
+                        ? `${emp.name} のメインシフト (${
+                            shiftTypeLabel(emp.main_shift_type ?? '')
+                          }) 以外で入っています`
+                        : ''
+                    "
+                  >
+                    {{ assignmentsFor(emp.id, d).label }}
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
+          <p class="legend">
+            <span class="legend-swatch legend-swatch--mismatch"></span>
+            赤: メインシフト以外で入っている割当
+          </p>
         </div>
       </NSpin>
     </NCard>
@@ -327,5 +355,28 @@ function goPrint() {
 .shift-grid th.fixed {
   background: #eaeef7;
   z-index: 2;
+}
+.shift-grid td.cell-main-mismatch {
+  background: #ffe3e3;
+  color: #c92a2a;
+  font-weight: 700;
+}
+.legend {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #6b7080;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #dde1e8;
+}
+.legend-swatch--mismatch {
+  background: #ffe3e3;
 }
 </style>
