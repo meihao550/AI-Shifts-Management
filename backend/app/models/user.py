@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 
-class UserRole(str, Enum):
+class UserRole(StrEnum):
     admin = "admin"
     employee = "employee"
 
@@ -33,7 +34,7 @@ class User(Base):
     employee_id: Mapped[int | None] = mapped_column(
         ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
     )
-    employee: Mapped["Employee | None"] = relationship("Employee", back_populates="user")
+    employee: Mapped[Employee | None] = relationship("Employee", back_populates="user")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

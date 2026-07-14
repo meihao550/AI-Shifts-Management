@@ -3,22 +3,24 @@
 from __future__ import annotations
 
 from datetime import time
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
-    Enum as SAEnum,
     Integer,
     String,
     Time,
     UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
-class DayCategory(str, Enum):
+class DayCategory(StrEnum):
     weekday = "weekday"
     weekend_or_holiday = "weekend_or_holiday"
 
