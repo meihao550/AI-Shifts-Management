@@ -101,6 +101,11 @@ def dev_login(
         db,
         {"email": email, "name": name, "sub": f"dev-{email}", "picture": None},
     )
+    # dev-login で作られた/呼ばれたユーザは常に admin に昇格
+    if user.role != UserRole.admin:
+        user.role = UserRole.admin
+        db.commit()
+        db.refresh(user)
     jwt_token = create_access_token(str(user.id), extra={"role": user.role.value})
     return LoginResponse(
         token=Token(access_token=jwt_token),
