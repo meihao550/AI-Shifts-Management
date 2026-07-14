@@ -104,139 +104,27 @@ gcloud config set run/region $REGION
 
 ## 4. Supabase で Postgres を作成
 
-**クレカ不要・完全無料**。ここが最もつまづきやすいので、画面遷移レベルで説明します。
+**クレカ不要・完全無料**。
 
-### 4-1. アカウント作成
+1. https://supabase.com/dashboard にアクセスして GitHub / Google でサインアップ
+2. **New project** をクリック
+   - Name: `ai-shifts`
+   - Database Password: 強力なパスワードを設定（**必ずメモ**）
+   - Region: `Northeast Asia (Tokyo)`
+   - Plan: **Free**
+3. プロジェクト作成に 2〜3 分
+4. **Project Settings → Database → Connection string → URI** から接続文字列をコピー
+   ```
+   postgresql://postgres.xxxxxxxxxxxx:[YOUR-PASSWORD]@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
+   ```
+5. `[YOUR-PASSWORD]` を Step 2 のパスワードに置換
+6. **SQLAlchemy 用にスキーマドライバを追加**：先頭を `postgresql+psycopg://` に変更
+   ```
+   postgresql+psycopg://postgres.xxxxxxxxxxxx:実際のPW@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
+   ```
+7. この URL は Step 9 で Secret Manager (`database-url`) に登録します
 
-1. https://supabase.com/dashboard にアクセス
-2. **Start your project** → **Continue with GitHub**（推奨）または Google / Email
-   - GitHub 連携なら追加登録不要。既存の GitHub アカウントでログインするだけ
-3. Organization の新規作成を求められたら以下のように設定
-   - **Name**: 好きな名前（例：`personal`）
-   - **Type**: `Personal`
-   - **Plan**: `Free`
-4. **クレジットカード登録画面が出たら「Later」or「Skip」を選択**（Free プランではカード不要）
-
-### 4-2. プロジェクト作成
-
-1. Organization ダッシュボードで **New project**
-2. 以下を入力：
-
-   | フィールド | 値 |
-   |---|---|
-   | **Project Name** | `ai-shifts`（何でも可） |
-   | **Database Password** | ⚠️ **強力なパスワード**（Generate a password ボタンで自動生成推奨） |
-   | **Region** | `Northeast Asia (Tokyo)` |
-   | **Pricing Plan** | `Free` |
-
-3. パスワードは **必ずメモ**（後で復元できない、リセットは可能だが手間）
-   - Generate a password で自動生成された場合、その場でコピー
-   - 特殊文字（`@`, `#`, `$` 等）を含むパスワードは後で URL エンコードが必要になるため、**英数字のみ**の 24 文字以上を推奨
-4. **Create new project** → プロビジョニング 2〜3 分待つ
-
-### 4-3. 接続文字列（DATABASE_URL）の取得
-
-Supabase には接続 URL が **3 種類**あります。用途に応じて使い分けます。
-
-| 種類 | ポート | 用途 | このプロジェクトで使うか |
-|---|---|---|---|
-| **Direct connection** | 5432 | プロセスが長生きする用途、psql | ❌ IPv6 のみのため Cloud Run から届かない |
-| **Session pooler** | 5432 | Alembic 等のマイグレーション、prepared statement を使う SQL | ✅ Alembic 用に使用 |
-| **Transaction pooler** | 6543 | 短命リクエスト（Cloud Run のような serverless） | ✅ 本番アプリで使用 |
-
-#### 取得手順
-
-1. 左サイドバーの **Project Settings**（歯車アイコン）→ **Database**
-2. 下にスクロールして **Connection string** セクション
-3. タブから以下 2 つを取得してメモ：
-
-   **(a) Transaction pooler**（アプリ実行時に使う）
-   - タブ: `Transaction pooler`
-   - Mode: `Transaction`
-   - 表示される URI：
-     ```
-     postgresql://postgres.abcdefghijk:[YOUR-PASSWORD]@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
-     ```
-
-   **(b) Session pooler**（Alembic マイグレーション時に使う）
-   - タブ: `Session pooler`
-   - 表示される URI：
-     ```
-     postgresql://postgres.abcdefghijk:[YOUR-PASSWORD]@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
-     ```
-
-4. **両方とも `[YOUR-PASSWORD]` を Step 4-2 のパスワードに置換**
-
-### 4-4. SQLAlchemy 用に変換
-
-先頭のドライバを `postgresql+psycopg://` に変更（`+psycopg` を追加するだけ）：
-
-```
-# 変更前
-postgresql://postgres.abcdefghijk:実際のPW@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
-
-# 変更後
-postgresql+psycopg://postgres.abcdefghijk:実際のPW@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
-```
-
-**Transaction pooler URL 側は末尾にクエリ**を追加してください（Transaction モードでは prepared statement が使えないため）：
-
-```
-postgresql+psycopg://postgres.abcdefghijk:実際のPW@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?prepare_threshold=0
-```
-
-Session pooler 側はそのままでOK。
-
-#### パスワードに特殊文字を含む場合の URL エンコード
-
-`@`, `#`, `/`, `?`, `%`, `&`, `+` などが入っている場合、URL エンコードが必要。ワンライナー：
-
-```bash
-python3 -c "import urllib.parse; print(urllib.parse.quote(input('password: '), safe=''))"
-```
-
-`Passw@rd#1` → `Passw%40rd%231` のように置換します。
-
-### 4-5. 接続テスト（ローカルから）
-
-Cloud Run にデプロイする前に、ローカルから届くか確認しておくと安心：
-
-```bash
-# Transaction pooler URL で接続確認
-psql "postgresql://postgres.abcdefghijk:実際のPW@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres" \
-  -c "SELECT version();"
-
-# 期待される出力:
-# PostgreSQL 15.x on aarch64-unknown-linux-gnu ...
-```
-
-`psql: FATAL: password authentication failed` が出たらパスワードを確認。`could not connect` の場合は URL のホスト名を確認。
-
-### 4-6. どの URL をどこで使うか
-
-- **Alembic マイグレーション**（Step 11）→ **Session pooler (5432)** URL
-- **Cloud Run backend の DATABASE_URL secret**（Step 9）→ **Transaction pooler (6543)** URL
-
-これらは Step 9 と Step 11 でそれぞれ Secret Manager と Alembic に渡します。
-
-### 4-7. パスワードを忘れた場合
-
-Supabase Dashboard → **Project Settings → Database → Reset database password** から再発行可能。パスワード変更後は Secret Manager の `database-url` も更新してください：
-
-```bash
-# 新しい URL を投入（新バージョンとして追加される）
-echo -n "postgresql+psycopg://..." | gcloud secrets versions add database-url --data-file=-
-
-# Cloud Run に反映
-gcloud run services update ai-shifts-backend --region=$REGION
-```
-
-### 4-8. 自動スリープに注意
-
-Supabase 無料プランは **7 日間アクセスがないと DB を自動停止** します。
-- 停止しても **課金は発生しません**
-- 次回アクセス時に自動再起動（初回リクエスト 5〜10 秒遅延）
-- 定期アクセスが必要なら Cloud Run で cron ジョブを立てて 1 日 1 回 `/api/health` を叩く手も
+> `pooler` 経由の接続は無料枠でも同時接続が安定します。直接接続用 URL（`db.xxxx.supabase.co:5432`）は避けてください。
 
 ---
 
@@ -337,9 +225,8 @@ done
 # SECRET_KEY (JWT 署名用)
 openssl rand -hex 32 | gcloud secrets versions add secret-key --data-file=-
 
-# Supabase Postgres 接続 URL
-# ★ Cloud Run 用は Transaction pooler (6543) + ?prepare_threshold=0
-echo -n "postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?prepare_threshold=0" \
+# Supabase Postgres 接続 URL（Step 4 でコピーしたもの、psycopg スキーマ付き）
+echo -n "postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres" \
   | gcloud secrets versions add database-url --data-file=-
 
 # Google OAuth
@@ -422,28 +309,16 @@ Supabase Postgres に Alembic のマイグレーションを適用します。**
 ```bash
 cd backend
 
-# ★ Alembic は Session pooler (5432) を使用（Transaction モードでは動かない）
-DATABASE_URL="postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres" \
+# Step 4 で作った URL をそのまま渡すだけ
+DATABASE_URL="postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres" \
   uv run alembic upgrade head
 ```
 
 出力に `Running upgrade -> 0001` と表示されれば成功。
 
-**確認**:
-- Supabase Dashboard → **Table Editor** で `employees`, `shifts`, `shift_patterns`, `staffing_rules`, `users`, `employee_availabilities`, `shift_assignments` が並んでいれば OK
-- カラムは Left panel の各テーブル → Definition で確認
+Supabase Dashboard → **Database → Tables** で `employees`, `shifts`, `shift_patterns` などが作られているのを確認できます。
 
 > `uv` を使わない場合は `python -m alembic upgrade head` でも OK。事前に `pip install -e ".[dev]"` が必要。
-
-### よくあるエラー
-
-| エラー | 原因 | 対処 |
-|---|---|---|
-| `password authentication failed` | パスワード誤り | Supabase Dashboard で確認 or リセット |
-| `could not translate host name` | ホスト名の typo | URL の `pooler.supabase.com` をコピペし直す |
-| `prepared statement already exists` | Transaction pooler (6543) 使用 | Session pooler (5432) に変更 |
-| `SSL error` | クライアントが SSL 不対応 | 通常発生しないが、URL に `?sslmode=require` を追加 |
-| `relation already exists` | 既に一部作成済み | `alembic downgrade base` → `upgrade head` で再作成 |
 
 ---
 

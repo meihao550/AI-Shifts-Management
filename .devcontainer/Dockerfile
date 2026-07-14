@@ -41,20 +41,32 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Terraform -------------------------------------------------------------
+# dpkg arch (amd64/arm64) matches HashiCorp's release naming, so this works on
+# both Intel and Apple Silicon hosts.
 ARG TERRAFORM_VERSION=1.9.8
-RUN curl -sLo /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" \
+RUN TF_ARCH="$(dpkg --print-architecture)" \
+    && curl -sLo /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TF_ARCH}.zip" \
     && unzip -o /tmp/tf.zip -d /usr/local/bin/ \
     && rm /tmp/tf.zip \
     && chmod +x /usr/local/bin/terraform
 
-# --- gcloud CLI ------------------------------------------------------------
+# --- gcloud CLI + Cloud SQL Auth Proxy -------------------------------------
+# The apt package `google-cloud-cli-cloud-sql-proxy` is only published for
+# amd64, so on arm64 (Apple Silicon) `apt-get install` fails with
+# "Unable to locate package". Install the gcloud CLI from apt, then fetch the
+# Cloud SQL Auth Proxy as a standalone arch-matched binary (it ships arm64).
+ARG CLOUD_SQL_PROXY_VERSION=2.11.0
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       > /etc/apt/sources.list.d/google-cloud-sdk.list \
     && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
        | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
     && apt-get update \
-    && apt-get install -y google-cloud-cli google-cloud-cli-cloud-sql-proxy \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y google-cloud-cli \
+    && rm -rf /var/lib/apt/lists/* \
+    && PROXY_ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSLo /usr/local/bin/cloud-sql-proxy \
+       "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v${CLOUD_SQL_PROXY_VERSION}/cloud-sql-proxy.linux.${PROXY_ARCH}" \
+    && chmod +x /usr/local/bin/cloud-sql-proxy
 
 # --- Docker CLI (for using the host's docker socket) ----------------------
 RUN install -m 0755 -d /etc/apt/keyrings \
