@@ -27,7 +27,7 @@
 11. [Docker とコンテナ](#11-docker-とコンテナ)
 12. [Git とチーム開発](#12-git-とチーム開発)
 13. [よくあるエラーと対処](#13-よくあるエラーと対処)
-14. [初心者編の次のステップ](#14-初心者編の次のステップ)
+14. [初心者編の次のステップ](#14-初心者編の次)
 
 ### 中級者編
 
@@ -112,61 +112,61 @@
 
 ### 言語
 
-| ツール | 何のため | 補足 |
-|---|---|---|
+| ツール         | 何のため     | 補足                                                        |
+| -------------- | ------------ | ----------------------------------------------------------- |
 | **TypeScript** | フロント開発 | JavaScript に「型」を足したもの。`age: number` のように書く |
-| **Python** | バック開発 | データ処理・機械学習・Web にも強い汎用言語 |
-| **SQL** | DB 操作 | 「このテーブルからこの条件のデータを取り出す」を書く |
+| **Python**     | バック開発   | データ処理・機械学習・Web にも強い汎用言語                  |
+| **SQL**        | DB 操作      | 「このテーブルからこの条件のデータを取り出す」を書く        |
 
 ### フロントエンドで使うもの
 
-| ツール | 役割 |
-|---|---|
-| **Vue 3** | 画面を作るフレームワーク（React と兄弟） |
-| **Vite** | 開発サーバ + ビルドツール（超速い） |
-| **Vue Router** | 「/dashboard」「/shift」などページ切り替え |
-| **Pinia** | ログイン情報など画面をまたぐデータを保持する箱 |
-| **Naive UI** | ボタン・表・カレンダーなど部品集 |
-| **axios** | バックエンドの API を叩く HTTP クライアント |
+| ツール         | 役割                                           |
+| -------------- | ---------------------------------------------- |
+| **Vue 3**      | 画面を作るフレームワーク（React と兄弟）       |
+| **Vite**       | 開発サーバ + ビルドツール（超速い）            |
+| **Vue Router** | 「/dashboard」「/shift」などページ切り替え     |
+| **Pinia**      | ログイン情報など画面をまたぐデータを保持する箱 |
+| **Naive UI**   | ボタン・表・カレンダーなど部品集               |
+| **axios**      | バックエンドの API を叩く HTTP クライアント    |
 
 ### バックエンドで使うもの
 
-| ツール | 役割 |
-|---|---|
-| **FastAPI** | API サーバフレームワーク。Swagger UI が自動で作られる |
-| **Pydantic** | データの形を定義して検証。「name は文字列、age は 15〜99」など |
-| **SQLAlchemy** | Python から SQL を生成する。テーブルをクラスとして書ける |
-| **Alembic** | DB のスキーマ変更履歴を管理（ファイルシステム版 Git みたいな） |
-| **OR-tools CP-SAT** | 制約充足問題（＝パズル）を解くソルバ。シフト作成に使う |
-| **JPHoliday** | 日本の祝日判定 |
-| **openpyxl / reportlab** | Excel / PDF 生成 |
-| **Anthropic / OpenAI SDK** | LLM を呼ぶための公式ライブラリ |
+| ツール                     | 役割                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| **FastAPI**                | API サーバフレームワーク。Swagger UI が自動で作られる          |
+| **Pydantic**               | データの形を定義して検証。「name は文字列、age は 15〜99」など |
+| **SQLAlchemy**             | Python から SQL を生成する。テーブルをクラスとして書ける       |
+| **Alembic**                | DB のスキーマ変更履歴を管理（ファイルシステム版 Git みたいな） |
+| **OR-tools CP-SAT**        | 制約充足問題（＝パズル）を解くソルバ。シフト作成に使う         |
+| **JPHoliday**              | 日本の祝日判定                                                 |
+| **openpyxl / reportlab**   | Excel / PDF 生成                                               |
+| **Anthropic / OpenAI SDK** | LLM を呼ぶための公式ライブラリ                                 |
 
 ### 開発を支えるもの
 
-| ツール | 役割 |
-|---|---|
+| ツール                      | 役割                                                                 |
+| --------------------------- | -------------------------------------------------------------------- |
 | **Docker / Docker Compose** | アプリを「箱（コンテナ）」に閉じ込めて、どの PC でも同じように動かす |
-| **Dev Container** | VS Code で Docker を開発環境として使う機能 |
-| **uv** | Python の高速パッケージマネージャ（pip の高速版） |
-| **npm** | Node.js のパッケージマネージャ |
-| **Ruff** | Python の Lint + Format（ミスチェック + 見た目整形） |
-| **mypy** | Python の型チェッカー |
-| **ESLint** | TS/JS の Lint |
-| **Prettier** | JS/TS/Vue の Format |
-| **Pytest** | Python のテストランナー |
-| **Vitest** | TS のテストランナー |
-| **Git** | ソースコードの変更履歴管理 |
-| **GitHub Actions** | プッシュ時に自動でテスト実行（CI） |
+| **Dev Container**           | VS Code で Docker を開発環境として使う機能                           |
+| **uv**                      | Python の高速パッケージマネージャ（pip の高速版）                    |
+| **npm**                     | Node.js のパッケージマネージャ                                       |
+| **Ruff**                    | Python の Lint + Format（ミスチェック + 見た目整形）                 |
+| **mypy**                    | Python の型チェッカー                                                |
+| **ESLint**                  | TS/JS の Lint                                                        |
+| **Prettier**                | JS/TS/Vue の Format                                                  |
+| **Pytest**                  | Python のテストランナー                                              |
+| **Vitest**                  | TS のテストランナー                                                  |
+| **Git**                     | ソースコードの変更履歴管理                                           |
+| **GitHub Actions**          | プッシュ時に自動でテスト実行（CI）                                   |
 
 ### インフラ / デプロイ
 
-| ツール | 役割 |
-|---|---|
-| **Supabase** | Postgres の無料ホスティング |
-| **Google Cloud Run** | Docker コンテナを実行する「無料枠つき」サーバ |
-| **Terraform** | インフラをコード化するツール（GUI ぽちぽち作業を撲滅） |
-| **Google OAuth** | Google アカウントでログインする仕組み |
+| ツール               | 役割                                                   |
+| -------------------- | ------------------------------------------------------ |
+| **Supabase**         | Postgres の無料ホスティング                            |
+| **Google Cloud Run** | Docker コンテナを実行する「無料枠つき」サーバ          |
+| **Terraform**        | インフラをコード化するツール（GUI ぽちぽち作業を撲滅） |
+| **Google OAuth**     | Google アカウントでログインする仕組み                  |
 
 ---
 
@@ -271,21 +271,21 @@ Vue は「画面を小さな部品（コンポーネント）に分けて作る�
 <!-- HelloWorld.vue -->
 <script setup lang="ts">
 // ① ロジック（TypeScript）
-import { ref } from 'vue'
-const count = ref(0)          // リアクティブな数値
-const increment = () => count.value++
+import { ref } from "vue";
+const count = ref(0); // リアクティブな数値
+const increment = () => count.value++;
 </script>
 
 <template>
   <!-- ② 見た目（HTML拡張） -->
-  <button @click="increment">
-    押した回数: {{ count }}
-  </button>
+  <button @click="increment">押した回数: {{ count }}</button>
 </template>
 
 <style scoped>
 /* ③ CSS（scoped でこのコンポーネントだけに適用） */
-button { font-size: 20px; }
+button {
+  font-size: 20px;
+}
 </style>
 ```
 
@@ -312,11 +312,11 @@ frontend/src/
 
 ```vue
 <script setup lang="ts">
-import { useShiftStore } from '@/stores/shift'
-const shift = useShiftStore()
+import { useShiftStore } from "@/stores/shift";
+const shift = useShiftStore();
 
 async function generate() {
-  await shift.generate({ year: 2026, month: 7 })
+  await shift.generate({ year: 2026, month: 7 });
 }
 </script>
 
@@ -334,20 +334,21 @@ async function generate() {
 
 ```ts
 // これだけ知ってれば大体読める
-const name: string = '田中'          // 文字列
-const age: number = 30               // 数値
-const active: boolean = true         // 真偽値
-const emails: string[] = ['a@x.jp']  // 文字列の配列
+const name: string = "田中"; // 文字列
+const age: number = 30; // 数値
+const active: boolean = true; // 真偽値
+const emails: string[] = ["a@x.jp"]; // 文字列の配列
 
-interface Employee {                 // 型の定義
-  id: number
-  name: string
-  age: number | null                 // number または null
-  email?: string                     // ? は省略可
+interface Employee {
+  // 型の定義
+  id: number;
+  name: string;
+  age: number | null; // number または null
+  email?: string; // ? は省略可
 }
 
 function greet(emp: Employee): string {
-  return `こんにちは ${emp.name}`
+  return `こんにちは ${emp.name}`;
 }
 ```
 
@@ -554,9 +555,9 @@ LLM は自由に文章を書くので、スキーマを厳密に指定しない�
 
 ```yaml
 services:
-  db:        # PostgreSQL
-  backend:   # FastAPI
-  frontend:  # Vite dev server
+  db: # PostgreSQL
+  backend: # FastAPI
+  frontend: # Vite dev server
 ```
 
 ### 11-3. 主要コマンド
@@ -648,6 +649,7 @@ chore: それ以外
 
 **原因**: ポートが他プロセスで使用中
 **対処**:
+
 ```bash
 lsof -i :5173     # 何が使ってるか確認
 kill <PID>        # 該当プロセスを止める
@@ -657,6 +659,7 @@ kill <PID>        # 該当プロセスを止める
 
 **原因**: マイグレーション履歴の食い違い
 **対処**:
+
 ```bash
 uv run alembic history       # 履歴確認
 uv run alembic current       # 現在のバージョン確認
@@ -668,6 +671,7 @@ uv run alembic upgrade head  # 再適用
 
 **原因**: backend が起動していない、または `FRONTEND_ORIGIN` が間違い
 **対処**:
+
 - backend の `docker compose logs backend` を確認
 - `.env` の `FRONTEND_ORIGIN=http://localhost:5173` を確認
 
@@ -687,6 +691,7 @@ uv run alembic upgrade head  # 再適用
 初心者編を読み終えたら中級者編（§15 以降）に進んでください。中級者編は「実際に機能追加できる」ことをゴールにしています。
 
 先に軽く手を動かすなら以下がオススメ：
+
 - `frontend/src/views/DashboardView.vue` の見た目を少し変えてみる
 - `backend/tests/test_payroll.py` に新しいテストケースを追加
 - Naive UI のドキュメントを見ながら新しい部品を試す
@@ -704,35 +709,39 @@ uv run alembic upgrade head  # 再適用
 ### 15-1. `ref` / `reactive` / `computed` の違い
 
 ```ts
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed } from "vue";
 
 // ref: プリミティブでも配列でもOK。値へのアクセスは .value 必須。
-const count = ref(0)
-count.value++
+const count = ref(0);
+count.value++;
 
 // reactive: オブジェクトだけ。プロパティに直アクセスできる。
-const state = reactive({ name: '田中', age: 30 })
-state.age = 31
+const state = reactive({ name: "田中", age: 30 });
+state.age = 31;
 
 // computed: 依存が変わったときだけ再計算されるキャッシュ付き値
-const doubled = computed(() => count.value * 2)
+const doubled = computed(() => count.value * 2);
 ```
 
 **使い分けの目安**:
+
 - 単一値・プリミティブ → `ref`
 - ドメインの塊（フォーム全体、設定オブジェクト） → `reactive`
 - 派生値 → `computed`
 
 **注意点**: `reactive` オブジェクトを分割代入すると反応性が壊れます。
+
 ```ts
-const state = reactive({ count: 0 })
-const { count } = state   // ← 反応性がここで切れる
+const state = reactive({ count: 0 });
+const { count } = state; // ← 反応性がここで切れる
 ```
+
 分割代入したいときは `toRefs()` を使う。
 
 ### 15-2. watch と watchEffect
 
 `watch`: 特定の値を監視して変化時にコールバック。
+
 ```ts
 import { watch } from 'vue'
 
@@ -751,13 +760,14 @@ watch(count, cb, { immediate: true })
 ```
 
 `watchEffect`: 使った reactive 値を自動追跡。
+
 ```ts
-import { watchEffect } from 'vue'
+import { watchEffect } from "vue";
 
 watchEffect(() => {
   // count と name のどちらかが変わったら再実行
-  console.log(`${name.value} = ${count.value}`)
-})
+  console.log(`${name.value} = ${count.value}`);
+});
 ```
 
 ### 15-3. composable を自作する
@@ -766,20 +776,21 @@ watchEffect(() => {
 
 ```ts
 // composables/useCounter.ts
-import { ref, computed } from 'vue'
+import { ref, computed } from "vue";
 
 export function useCounter(initial = 0) {
-  const count = ref(initial)
-  const doubled = computed(() => count.value * 2)
-  const increment = () => count.value++
-  const reset = () => (count.value = initial)
-  return { count, doubled, increment, reset }
+  const count = ref(initial);
+  const doubled = computed(() => count.value * 2);
+  const increment = () => count.value++;
+  const reset = () => (count.value = initial);
+  return { count, doubled, increment, reset };
 }
 ```
 
 コンポーネントから使う：
+
 ```ts
-const { count, doubled, increment } = useCounter(10)
+const { count, doubled, increment } = useCounter(10);
 ```
 
 本プロジェクトの例: `useShiftStore` は Pinia の store だが、動作原理は composable と同じ (store 自体が composition function)。
@@ -795,14 +806,14 @@ const { count, doubled, increment } = useCounter(10)
 | `onErrorCaptured` | 子孫コンポーネントのエラーを捕捉 |
 
 ```ts
-import { onMounted, onBeforeUnmount } from 'vue'
+import { onMounted, onBeforeUnmount } from "vue";
 
 onMounted(() => {
-  window.addEventListener('resize', handler)
-})
+  window.addEventListener("resize", handler);
+});
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handler)
-})
+  window.removeEventListener("resize", handler);
+});
 ```
 
 ---
@@ -812,6 +823,7 @@ onBeforeUnmount(() => {
 ### 16-1. store の定義パターン
 
 このプロジェクトは Options 記法を使用：
+
 ```ts
 // stores/shift.ts
 export const useShiftStore = defineStore('shift', {
@@ -826,6 +838,7 @@ export const useShiftStore = defineStore('shift', {
 ```
 
 Composition 記法（同等）:
+
 ```ts
 export const useShiftStore = defineStore('shift', () => {
   const shift = ref<Shift | null>(null)
@@ -841,16 +854,16 @@ export const useShiftStore = defineStore('shift', () => {
 
 ```ts
 // stores/employee.ts
-import { useAuthStore } from './auth'
+import { useAuthStore } from "./auth";
 
-export const useEmployeeStore = defineStore('employee', {
+export const useEmployeeStore = defineStore("employee", {
   actions: {
     async fetchMine() {
-      const auth = useAuthStore()   // ← action の中で呼ぶ
-      return await api.get(`/employees/${auth.user?.employee_id}`)
+      const auth = useAuthStore(); // ← action の中で呼ぶ
+      return await api.get(`/employees/${auth.user?.employee_id}`);
     },
   },
-})
+});
 ```
 
 **注意**: setup の外 (モジュールのトップレベル) で `useXxxStore()` を呼ぶと、Pinia がまだ初期化されていない可能性がある。必ず setup / action / composable 内で呼ぶ。
@@ -859,15 +872,15 @@ export const useEmployeeStore = defineStore('employee', {
 
 ```ts
 // 全 state を初期状態にリセット
-store.$reset()
+store.$reset();
 
 // 特定のフィールドだけ patch
-store.$patch({ shift: null })
+store.$patch({ shift: null });
 
 // 変更検知
 store.$subscribe((mutation, state) => {
-  localStorage.setItem('shift-state', JSON.stringify(state))
-})
+  localStorage.setItem("shift-state", JSON.stringify(state));
+});
 ```
 
 永続化ライブラリ (`pinia-plugin-persistedstate`) を入れると自動化できる。
@@ -924,6 +937,7 @@ async def async_ep():
 ```
 
 **選び方**:
+
 - I/O 待ちが長い外部 API → `async def` + `httpx.AsyncClient`
 - DB アクセスだけ → `def`（SQLAlchemy の同期 API を素直に使う方が楽）
 - 混在するな → 統一する（`async` 内で同期 DB を呼ぶと event loop がブロック）
@@ -931,6 +945,7 @@ async def async_ep():
 ### 17-4. BackgroundTasks
 
 重い処理をレスポンス後に走らせる：
+
 ```python
 @router.post("/shifts/generate")
 def generate(bt: BackgroundTasks):
@@ -979,6 +994,7 @@ class ShiftAssignment(Base):
 ### 18-2. N+1 問題と解決
 
 **悪い例**:
+
 ```python
 employees = db.execute(select(Employee)).scalars().all()
 for e in employees:
@@ -986,6 +1002,7 @@ for e in employees:
 ```
 
 **修正**: `selectinload` で一括ロード。
+
 ```python
 from sqlalchemy.orm import selectinload
 
@@ -996,6 +1013,7 @@ for e in employees:
 ```
 
 **種類**:
+
 - `selectinload`: 別クエリで IN 句、行数少ないなら◎
 - `joinedload`: JOIN、多重リレーションで爆発しがち
 - `contains_eager`: 明示的 JOIN + eager load
@@ -1203,6 +1221,7 @@ if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
 - **ソフト**: 「違反ペナルティ変数」を用意して目的関数に加える
 
 本プロジェクトの例（`scheduler.py`）：
+
 ```python
 # ソフト: 週の希望回数からのずれを最小化
 over = model.NewIntVar(0, 31, f"over_{emp.id}")
@@ -1252,14 +1271,14 @@ Markdown コードフェンス不要。前後の説明も不要。
 
 ### 22-2. パースの防御
 
-```python
+````python
 def _parse_json(text: str) -> dict:
     text = text.strip()
     # code fence を除去
     if text.startswith("```"):
         text = text.strip("`").split("\n", 1)[1].rstrip("`").rstrip()
     return json.loads(text)
-```
+````
 
 `json.JSONDecodeError` を必ず try/except で捕捉して、失敗時はデフォルト値を返す（本プロジェクトは空 dict）。
 
@@ -1290,6 +1309,7 @@ def _parse_json(text: str) -> dict:
 ```
 
 本プロジェクトの現状：
+
 - 単体: `test_payroll.py`, `test_holidays.py` — 純関数のみで OK
 - 統合: これから拡充する余地大（TestClient + テスト用 DB）
 - E2E: Playwright / Cypress で検討
@@ -1315,6 +1335,7 @@ def client(db_engine):
 ```
 
 使い方：
+
 ```python
 def test_health(client):
     r = client.get("/api/health")
@@ -1341,27 +1362,28 @@ def test_insurance(hours, expected):
 
 ```ts
 // src/composables/__tests__/useCounter.spec.ts
-import { describe, it, expect } from 'vitest'
-import { useCounter } from '../useCounter'
+import { describe, it, expect } from "vitest";
+import { useCounter } from "../useCounter";
 
-describe('useCounter', () => {
-  it('increments', () => {
-    const { count, increment } = useCounter()
-    increment()
-    expect(count.value).toBe(1)
-  })
-})
+describe("useCounter", () => {
+  it("increments", () => {
+    const { count, increment } = useCounter();
+    increment();
+    expect(count.value).toBe(1);
+  });
+});
 ```
 
 コンポーネントのマウントテスト：
-```ts
-import { mount } from '@vue/test-utils'
-import ShiftTable from '@/views/ShiftTableView.vue'
 
-it('renders', () => {
-  const wrapper = mount(ShiftTable, { global: { plugins: [pinia, router] } })
-  expect(wrapper.text()).toContain('シフト表')
-})
+```ts
+import { mount } from "@vue/test-utils";
+import ShiftTable from "@/views/ShiftTableView.vue";
+
+it("renders", () => {
+  const wrapper = mount(ShiftTable, { global: { plugins: [pinia, router] } });
+  expect(wrapper.text()).toContain("シフト表");
+});
 ```
 
 ### 23-5. モックの原則
@@ -1405,6 +1427,7 @@ engine = create_engine(url, echo=True)
 ```
 
 または特定クエリの生成 SQL を確認：
+
 ```python
 print(str(stmt.compile(compile_kwargs={"literal_binds": True})))
 ```
@@ -1498,6 +1521,7 @@ gcloud run services logs read ai-shifts-backend --region=asia-northeast1 --limit
 ### 27-1. `.github/workflows/ci.yml`
 
 現状の CI（コミット時 / PR 時に走る）：
+
 1. **backend job**: Postgres サービスコンテナ起動 → `pip install` → `ruff check` → `pytest`
 2. **frontend job**: `npm install` → `npm run build` → `npm run test:unit`
 
@@ -1510,14 +1534,14 @@ gcloud run services logs read ai-shifts-backend --region=asia-northeast1 --limit
 ### 27-3. デプロイパイプライン（将来）
 
 現状は手動 `docker build → push → gcloud run update`。自動化するなら：
+
 ```yaml
 # .github/workflows/deploy.yml
 on:
   push:
     branches: [main]
 jobs:
-  deploy:
-    ...
+  deploy: ...
 ```
 
 Workload Identity Federation でサービスアカウントキー不要にするのが安全。
@@ -1525,6 +1549,7 @@ Workload Identity Federation でサービスアカウントキー不要にする
 ### 27-4. Pre-commit フック
 
 `.pre-commit-config.yaml` により commit 時に：
+
 - Ruff（Python lint/format）
 - Prettier（フロント format）
 - trailing whitespace 除去
@@ -1532,6 +1557,7 @@ Workload Identity Federation でサービスアカウントキー不要にする
 - YAML/JSON パース
 
 有効化：
+
 ```bash
 pip install pre-commit
 pre-commit install
