@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { NButton, NPopover, NSelect, NSpace, NSpin, NTag, useMessage } from 'naive-ui'
+import { NSelect, NSpace, NSpin, NTag, useMessage } from 'naive-ui'
+import { api } from '@/api/client'
 import { useEmployeeStore } from '@/stores/employee'
-import type { Availability, AvailabilityKind } from '@/types'
+import type { Availability, AvailabilityKind, Holiday } from '@/types'
 
 const props = defineProps<{ year: number; month: number }>()
 
@@ -12,6 +13,8 @@ const message = useMessage()
 const selectedEmployeeId = ref<number | null>(null)
 const availabilities = ref<Availability[]>([])
 const loading = ref(false)
+// ISO日付 -> 祝日名
+const holidays = ref<Record<string, string>>({})
 
 const employeeOptions = computed(() =>
   employeeStore.employees.map((e) => ({ label: e.name, value: e.id })),
@@ -43,10 +46,25 @@ async function refresh() {
   }
 }
 
+async function fetchHolidays() {
+  try {
+    const { data } = await api.get<Holiday[]>('/holidays', {
+      params: { year: props.year, month: props.month },
+    })
+    holidays.value = Object.fromEntries(data.map((h) => [h.date, h.name]))
+  } catch {
+    holidays.value = {}
+  }
+}
+
 watch(selectedEmployeeId, refresh)
-watch(() => [props.year, props.month], refresh)
+watch(() => [props.year, props.month], () => {
+  refresh()
+  fetchHolidays()
+})
 
 onMounted(async () => {
+  fetchHolidays()
   if (!employeeStore.employees.length) await employeeStore.fetchAll()
   if (employeeStore.employees.length && !selectedEmployeeId.value) {
     selectedEmployeeId.value = employeeStore.employees[0].id
@@ -65,31 +83,61 @@ function itemsOn(d: Date): Availability[] {
   return availabilities.value.filter((a) => a.target_date === iso)
 }
 
+function holidayName(d: Date): string | undefined {
+  return holidays.value[isoDate(d)]
+}
+
 async function add(kind: AvailabilityKind, d: Date) {
   if (!selectedEmployeeId.value) return
-  try {
-    const created = await employeeStore.createAvailability({
-      employee_id: selectedEmployeeId.value,
-      target_date: isoDate(d),
-      kind,
-      shift_type: null,
-      note: null,
-    })
-    availabilities.value.push(created)
-    message.success(
-      `${isoDate(d)} を ${kind === 'unavailable' ? '休日' : '希望日'} に追加しました`,
-    )
-  } catch (e) {
-    message.error(`登録失敗: ${(e as Error).message}`)
-  }
+  const created = await employeeStore.createAvailability({
+    employee_id: selectedEmployeeId.value,
+    target_date: isoDate(d),
+    kind,
+    shift_type: null,
+    note: null,
+  })
+  availabilities.value.push(created)
 }
 
 async function remove(id: number) {
-  try {
-    await employeeStore.deleteAvailability(id)
-    availabilities.value = availabilities.value.filter((a) => a.id !== id)
-  } catch (e) {
-    message.error(`削除失敗: ${(e as Error).message}`)
+  await employeeStore.deleteAvailability(id)
+  availabilities.value = availabilities.value.filter((a) => a.id !== id)
+}
+
+// クリックで状態を循環させる: なし → 休日 → 希望日 → なし
+// 1回=休日 / 2回=希望日 / 3回=元に戻る。
+// 素早い連打（ダブルクリック等）でも順序が崩れないよう、日付ごとに
+// クリックを直列処理する（前のAPI呼び出し完了後に次を実行）。
+const chains = new Map<string, Promise<void>>()
+
+function cycle(d: Date) {
+  if (!selectedEmployeeId.value) return
+  const iso = isoDate(d)
+  const prev = chains.get(iso) ?? Promise.resolve()
+  const next = prev.then(() => step(d)).catch((e) => {
+    message.error(`更新失敗: ${(e as Error).message}`)
+  })
+  chains.set(iso, next)
+}
+
+async function step(d: Date) {
+  const items = itemsOn(d)
+  const unavailable = items.find((i) => i.kind === 'unavailable')
+  const preferred = items.find((i) => i.kind === 'preferred')
+
+  if (!unavailable && !preferred) {
+    // なし → 休日
+    await add('unavailable', d)
+  } else if (unavailable && !preferred) {
+    // 休日 → 希望日
+    await remove(unavailable.id)
+    await add('preferred', d)
+  } else if (preferred && !unavailable) {
+    // 希望日 → なし
+    await remove(preferred.id)
+  } else {
+    // 両方存在する場合（旧データ）はすべて消して「なし」に戻す
+    for (const it of items) await remove(it.id)
   }
 }
 
@@ -102,7 +150,7 @@ function dayClass(d: Date) {
 
 function dayColor(d: Date) {
   const w = d.getDay()
-  if (w === 0) return '#c92a2a'
+  if (w === 0 || holidayName(d)) return '#c92a2a'
   if (w === 6) return '#1971c2'
   return '#333'
 }
@@ -120,7 +168,7 @@ function dayColor(d: Date) {
       />
       <NTag :bordered="false" round type="error">■ 休日 (勤務不可)</NTag>
       <NTag :bordered="false" round type="success">■ 希望日</NTag>
-      <span class="hint">日付をクリックして休日/希望日を登録</span>
+      <span class="hint">クリックで切替: 1回=休日 / 2回=希望日 / 3回=解除</span>
     </NSpace>
 
     <NSpin :show="loading">
@@ -133,49 +181,27 @@ function dayColor(d: Date) {
           :key="`pad-${i}`"
           class="pad"
         />
-        <NPopover
+        <div
           v-for="d in days"
           :key="d.getTime()"
-          trigger="click"
-          placement="bottom"
+          :class="dayClass(d)"
+          :style="{ color: dayColor(d) }"
+          :title="holidayName(d)"
+          @click="cycle(d)"
         >
-          <template #trigger>
-            <div :class="dayClass(d)" :style="{ color: dayColor(d) }">
-              <div class="num">{{ d.getDate() }}</div>
-              <div class="marks">
-                <span
-                  v-if="itemsOn(d).some((i) => i.kind === 'unavailable')"
-                  class="mark mark--unavailable"
-                >休</span>
-                <span
-                  v-if="itemsOn(d).some((i) => i.kind === 'preferred')"
-                  class="mark mark--preferred"
-                >希</span>
-              </div>
-            </div>
-          </template>
-          <div style="min-width: 200px">
-            <p style="margin: 0 0 8px; font-weight: 600">
-              {{ d.getFullYear() }}/{{ d.getMonth() + 1 }}/{{ d.getDate() }}
-            </p>
-            <NSpace vertical size="small">
-              <div v-for="a in itemsOn(d)" :key="a.id" class="item-row">
-                <NTag :type="a.kind === 'unavailable' ? 'error' : 'success'" size="small">
-                  {{ a.kind === 'unavailable' ? '休日' : '希望日' }}
-                </NTag>
-                <NButton size="tiny" quaternary type="error" @click="remove(a.id)">削除</NButton>
-              </div>
-              <NSpace>
-                <NButton size="small" type="error" ghost @click="add('unavailable', d)">
-                  休日として登録
-                </NButton>
-                <NButton size="small" type="success" ghost @click="add('preferred', d)">
-                  希望日として登録
-                </NButton>
-              </NSpace>
-            </NSpace>
+          <div class="num">{{ d.getDate() }}</div>
+          <div v-if="holidayName(d)" class="holiday">{{ holidayName(d) }}</div>
+          <div class="marks">
+            <span
+              v-if="itemsOn(d).some((i) => i.kind === 'unavailable')"
+              class="mark mark--unavailable"
+            >休</span>
+            <span
+              v-if="itemsOn(d).some((i) => i.kind === 'preferred')"
+              class="mark mark--preferred"
+            >希</span>
           </div>
-        </NPopover>
+        </div>
       </div>
     </NSpin>
   </div>
@@ -209,6 +235,7 @@ function dayColor(d: Date) {
   flex-direction: column;
   background: #fff;
   transition: box-shadow 0.15s;
+  user-select: none;
 }
 .day:hover {
   box-shadow: 0 0 0 2px rgba(80, 160, 255, 0.25);
@@ -224,6 +251,14 @@ function dayColor(d: Date) {
 .num {
   font-weight: 600;
   font-size: 13px;
+}
+.holiday {
+  font-size: 9px;
+  line-height: 1.1;
+  color: #c92a2a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .marks {
   margin-top: auto;

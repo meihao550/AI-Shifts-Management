@@ -22,6 +22,11 @@ export interface Employee {
   active: boolean
 }
 
+export interface Holiday {
+  date: string
+  name: string
+}
+
 export type AvailabilityKind = 'unavailable' | 'preferred'
 
 export interface Availability {
