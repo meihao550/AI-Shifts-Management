@@ -14,6 +14,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# ルートの .env を環境変数として読み込む。
+# backend を cd backend して起動すると pydantic-settings は backend/.env を
+# 探してしまい（存在しない）、DATABASE_URL がデフォルトの localhost に
+# フォールバックして DB 接続に失敗する。環境変数で渡せば cwd に関係なく効く。
+# .env が CRLF(Windows改行) の場合、そのまま source すると値に \r が混入して
+# 壊れるため tr で除去してから読み込む。
+if [ -f "$ROOT_DIR/.env" ]; then
+  echo "==> $ROOT_DIR/.env を読み込み"
+  set -a
+  . <(tr -d '\r' < "$ROOT_DIR/.env")
+  set +a
+fi
+
 pids=()
 
 # 終了時に子プロセス（backend / frontend）をまとめて片付ける
