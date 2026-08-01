@@ -56,7 +56,7 @@
 | **認証** | Google OAuth 2.0 + JWT | Workspace ドメインで絞り込み可能 |
 | **開発環境** | Dev Container (VS Code) | Python / Node / Terraform / gcloud すべて統一 |
 | **CI / Lint** | Ruff + mypy + ESLint + Prettier + Vitest + Pytest | 自動整形と型検証 |
-| **デプロイ** | Cloud Run + Terraform | サーバレスで無料枠内、コード管理化 |
+| **デプロイ** | AWS + Terraform | サーバレスで無料枠内、コード管理化 |
 
 ---
 
