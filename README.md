@@ -82,13 +82,7 @@
 3. 初回はコンテナビルドで 5〜10 分。完了後、ターミナルはコンテナ内に接続されます
 4. 起動：
    ```bash
-   # ターミナル 1: バックエンド
-   cd backend
-   uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-   # ターミナル 2: フロントエンド
-   cd frontend
-   npm run dev -- --host 0.0.0.0
+   bash dev.sh
    ```
 5. ブラウザで http://localhost:5173 を開く
 
