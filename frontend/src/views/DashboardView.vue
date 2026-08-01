@@ -67,12 +67,7 @@ const showDeadlineNotice = day >= 26
       </NGridItem>
       <NGridItem>
         <NCard title="自分の勤務時間">
-          <NStatistic
-            v-if="totalHoursForMe !== null"
-            label="今月の総勤務時間"
-            :value="totalHoursForMe"
-            suffix="h"
-          />
+          <NStatistic v-if="totalHoursForMe !== null" label="今月の総勤務時間" :value="totalHoursForMe" suffix="h" />
           <NEmpty v-else description="従業員リンクなし" />
         </NCard>
       </NGridItem>
@@ -107,7 +102,7 @@ const showDeadlineNotice = day >= 26
           <NEmpty description="今月のシフトはまだ作成されていません">
             <template #extra>
               <NButton type="primary" @click="router.push('/shift')">
-                シフト表画面へ (作成)
+                シフト表作成
               </NButton>
             </template>
           </NEmpty>
@@ -123,11 +118,13 @@ const showDeadlineNotice = day >= 26
   flex-direction: column;
   gap: 16px;
 }
+
 .hint {
   color: #8892a6;
   margin: 8px 0 0;
   font-size: 12px;
 }
+
 .preview {
   display: flex;
   flex-direction: column;
