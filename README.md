@@ -56,7 +56,7 @@
 | **認証** | Google OAuth 2.0 + JWT | Workspace ドメインで絞り込み可能 |
 | **開発環境** | Dev Container (VS Code) | Python / Node / Terraform / gcloud すべて統一 |
 | **CI / Lint** | Ruff + mypy + ESLint + Prettier + Vitest + Pytest | 自動整形と型検証 |
-| **デプロイ** | Cloud Run + Terraform | サーバレスで無料枠内、コード管理化 |
+| **デプロイ** | AWS + Terraform | サーバレスで無料枠内、コード管理化 |
 
 ---
 
@@ -82,13 +82,7 @@
 3. 初回はコンテナビルドで 5〜10 分。完了後、ターミナルはコンテナ内に接続されます
 4. 起動：
    ```bash
-   # ターミナル 1: バックエンド
-   cd backend
-   uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-   # ターミナル 2: フロントエンド
-   cd frontend
-   npm run dev -- --host 0.0.0.0
+   bash dev.sh
    ```
 5. ブラウザで http://localhost:5173 を開く
 
