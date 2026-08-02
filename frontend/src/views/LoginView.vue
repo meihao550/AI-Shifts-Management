@@ -57,7 +57,7 @@ async function reset() {
         Google Workspace でログイン
       </NButton>
 
-      <NDivider>開発用ログイン</NDivider>
+      <NDivider>うおｗ</NDivider>
 
       <NForm label-placement="left" label-width="80px">
         <NFormItem label="Email">
@@ -91,18 +91,22 @@ async function reset() {
   justify-content: center;
   background: linear-gradient(140deg, #26314f, #4067a5);
 }
+
 .login-card {
   width: 440px;
   padding: 24px;
 }
+
 .title {
   margin: 0 0 4px;
   font-size: 22px;
 }
+
 .subtitle {
   margin: 0 0 24px;
   color: #6b7080;
 }
+
 .hint {
   color: #8892a6;
   font-size: 12px;
