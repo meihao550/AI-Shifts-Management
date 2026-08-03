@@ -19,9 +19,10 @@ dist-ssr/
 .vite/
 
 # Env
+# .env と派生ファイル（.env.production / .env.local など）は全て無視。
+# 例として .env.example だけは追跡する。
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
 # IDE
