@@ -11,7 +11,7 @@
     "8000": { "label": "Backend (FastAPI)", "onAutoForward": "notify" },
     "5432": { "label": "PostgreSQL", "onAutoForward": "silent" }
   },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postCreateCommand": "sed -i 's/\\r$//' .devcontainer/post-create.sh && bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [
