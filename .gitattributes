@@ -1,0 +1,22 @@
+# 既定：テキストは自動判定し、リポジトリ内は LF で正規化
+* text=auto eol=lf
+
+# Linux コンテナに入る＝必ず LF でなければ壊れるもの
+*.sh              text eol=lf
+Dockerfile        text eol=lf
+*.yml             text eol=lf
+*.yaml            text eol=lf
+.env*             text eol=lf
+*.json            text eol=lf
+*.py              text eol=lf
+
+# Windows 専用スクリプトがあれば CRLF を維持
+*.bat             text eol=crlf
+*.cmd             text eol=crlf
+*.ps1             text eol=crlf
+
+# バイナリは変換しない
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
