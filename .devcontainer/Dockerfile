@@ -79,7 +79,9 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Global npm tools ------------------------------------------------------
-RUN npm install -g pnpm@latest
+# pnpm: フロントの代替パッケージマネージャ
+# @anthropic-ai/claude-code: Claude Code CLI（devcontainer 内で `claude` を使えるように）
+RUN npm install -g pnpm@latest @anthropic-ai/claude-code
 
 # --- Non-root user setup (base image already has "vscode" uid 1000) --------
 # Allow vscode user to use the docker socket via group
