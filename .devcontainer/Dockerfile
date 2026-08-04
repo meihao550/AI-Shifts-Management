@@ -50,11 +50,15 @@ RUN TF_ARCH="$(dpkg --print-architecture)" \
     && rm /tmp/tf.zip \
     && chmod +x /usr/local/bin/terraform
 
+# --- Claude Codeのインストール -----------------------------------------------
+RUN npm install -g @anthropic-ai/claude-code
+
 # --- gcloud CLI + Cloud SQL Auth Proxy -------------------------------------
 # The apt package `google-cloud-cli-cloud-sql-proxy` is only published for
 # amd64, so on arm64 (Apple Silicon) `apt-get install` fails with
 # "Unable to locate package". Install the gcloud CLI from apt, then fetch the
 # Cloud SQL Auth Proxy as a standalone arch-matched binary (it ships arm64).
+# AWSに移行のため削除予定
 ARG CLOUD_SQL_PROXY_VERSION=2.11.0
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       > /etc/apt/sources.list.d/google-cloud-sdk.list \
