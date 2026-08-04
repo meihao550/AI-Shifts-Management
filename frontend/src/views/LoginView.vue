@@ -57,7 +57,7 @@ async function reset() {
         Google Workspace でログイン
       </NButton>
 
-      <NDivider>開発用ログイン</NDivider>
+      <NDivider>開発用</NDivider>
 
       <NForm label-placement="left" label-width="80px">
         <NFormItem label="Email">
