@@ -2,7 +2,7 @@
 
 生成 AI（LLM）と OR-tools CP-SAT による制約プログラミングを組み合わせた、シフト自動作成 / 人件費計算 Web アプリです。
 
-- **本番環境**: https://ai-shifts-frontend-1032481076647.asia-northeast1.run.app （デプロイ済み）
+- **本番環境**: AWSで構築する。
 - **企画書**: [`docs/Project.pdf`](docs/project-requirements-ver1.1.md)
 - **チュートリアル（初心者向け）**: [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
 - **デプロイ手順**: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
