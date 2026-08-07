@@ -212,7 +212,7 @@ Ai shifts management 要件定義書 · MD
 
 ### CI/CD
 
-- GCPで管理する
+- AWSで管理する
 - **PR必須**
 
 ### シークレット管理
