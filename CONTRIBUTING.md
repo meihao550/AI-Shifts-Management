@@ -263,7 +263,7 @@ uv run alembic upgrade head
 
 ### 誤 commit したら
 
-1. **即 Slack で報告**
+1. **即 Discord で報告**
 2. 該当キー / 認証情報を即座に revoke（Anthropic / OpenAI / Google Cloud で新規発行）
 3. `git filter-repo` で履歴から除去（reviewer と相談）
 4. `git push --force`（保護ブランチ以外）
