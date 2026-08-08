@@ -20,8 +20,7 @@
 - 人件費（給料・深夜割増・交通費・保険判定）を **計算する**
 - シフト表を **PDF / Excel ファイルに変換して** 返す
 
-画面（フロントエンド）は **計算やデータ保存を自分ではしません**。
-すべてこのバックエンドにお願いしています。
+サーバーの計算はすべてこのバックエンドで計算しています。
 
 ```
 [ブラウザ(画面)]  ←→  [バックエンドAPI]  ←→  [データベース]
@@ -38,12 +37,12 @@
 バックエンドは、外から見ると **窓口（エンドポイント）がたくさん並んだ受付** です。
 窓口は「URL」と「動詞（メソッド）」の組み合わせで区別されます。
 
-| 動詞 | 意味 | 例 |
-|------|------|-----|
-| `GET` | ちょうだい（取得） | `GET /api/employees` → 従業員一覧をください |
-| `POST` | 作って（新規登録） | `POST /api/employees` → 新しい従業員を追加して |
-| `PATCH` / `PUT` | 書き換えて（更新） | `PATCH /api/employees/3` → 3番の人を更新して |
-| `DELETE` | 消して（削除） | `DELETE /api/employees/3` → 3番の人を削除して |
+| 動詞            | 意味               | 例                                             |
+| --------------- | ------------------ | ---------------------------------------------- |
+| `GET`           | ちょうだい（取得） | `GET /api/employees` → 従業員一覧をください    |
+| `POST`          | 作って（新規登録） | `POST /api/employees` → 新しい従業員を追加して |
+| `PATCH` / `PUT` | 書き換えて（更新） | `PATCH /api/employees/3` → 3番の人を更新して   |
+| `DELETE`        | 消して（削除）     | `DELETE /api/employees/3` → 3番の人を削除して  |
 
 フロントエンドが `api.get('/employees')` と呼ぶと、
 サーバー側の `GET /api/employees` の窓口が反応して、データを返します。
@@ -243,12 +242,12 @@ def get_db() -> Generator[Session, None, None]:
 
 登場人物は 4 つです。
 
-| 名前 | 役割 | たとえ |
-|------|------|--------|
-| `engine`（エンジン） | DB への接続の管理者 | 電話回線 |
-| `SessionLocal`（セッション） | 1 回分の会話 | 1 本の通話 |
-| `Base` | すべての表の親クラス | 表のひな形 |
-| `get_db()` | 通話を貸し出す係 | 電話交換手 |
+| 名前                         | 役割                 | たとえ     |
+| ---------------------------- | -------------------- | ---------- |
+| `engine`（エンジン）         | DB への接続の管理者  | 電話回線   |
+| `SessionLocal`（セッション） | 1 回分の会話         | 1 本の通話 |
+| `Base`                       | すべての表の親クラス | 表のひな形 |
+| `get_db()`                   | 通話を貸し出す係     | 電話交換手 |
 
 `get_db()` の `yield`（イールド）は **「ここで一旦相手に渡して、終わったら戻ってくる」**
 という特殊な `return` です。窓口の処理が終わると必ず `finally` に戻り、
@@ -297,13 +296,13 @@ class Employee(Base):
 1 行が 1 つの列（カラム）です。書式は
 `列名: Mapped[Python の型] = mapped_column(DB の型, オプション...)`。
 
-| オプション | 意味 |
-|-----------|------|
-| `primary_key=True` | この列が「行を一意に識別する番号」（ID） |
-| `nullable=False` | 空っぽ（NULL）を許さない＝必須項目 |
-| `unique=True` | 重複禁止（同じメールアドレスの人は登録できない） |
-| `default=1100` | 指定しなかったときの初期値 |
-| `String(100)` | 最大 100 文字の文字列 |
+| オプション         | 意味                                             |
+| ------------------ | ------------------------------------------------ |
+| `primary_key=True` | この列が「行を一意に識別する番号」（ID）         |
+| `nullable=False`   | 空っぽ（NULL）を許さない＝必須項目               |
+| `unique=True`      | 重複禁止（同じメールアドレスの人は登録できない） |
+| `default=1100`     | 指定しなかったときの初期値                       |
+| `String(100)`      | 最大 100 文字の文字列                            |
 
 ### 4-3. 表と表のつながり（リレーション）
 
@@ -350,15 +349,15 @@ shift_patterns（朝/夜/深夜の時間定義）
 staffing_rules（平日の朝は2人…という必要人員）
 ```
 
-| 表 | 保管しているもの | ファイル |
-|----|------------------|----------|
-| `users` | ログインする人（Google アカウント紐付け） | `models/user.py` |
-| `employees` | 従業員の名前・時給・交通費・週何回入るか | `models/employee.py` |
-| `employee_availabilities` | 「この日は休みたい／入りたい」 | `models/employee.py` |
-| `shifts` | 「2026年8月のシフト表」という入れ物 | `models/shift.py` |
-| `shift_assignments` | 「8/1に田中さんが朝シフト」という 1 マス分 | `models/shift.py` |
-| `shift_patterns` | 「朝 = 09:00-17:00」というパターン定義 | `models/rule.py` |
-| `staffing_rules` | 「平日の朝は 2 人必要」というルール | `models/rule.py` |
+| 表                        | 保管しているもの                           | ファイル             |
+| ------------------------- | ------------------------------------------ | -------------------- |
+| `users`                   | ログインする人（Google アカウント紐付け）  | `models/user.py`     |
+| `employees`               | 従業員の名前・時給・交通費・週何回入るか   | `models/employee.py` |
+| `employee_availabilities` | 「この日は休みたい／入りたい」             | `models/employee.py` |
+| `shifts`                  | 「2026年8月のシフト表」という入れ物        | `models/shift.py`    |
+| `shift_assignments`       | 「8/1に田中さんが朝シフト」という 1 マス分 | `models/shift.py`    |
+| `shift_patterns`          | 「朝 = 09:00-17:00」というパターン定義     | `models/rule.py`     |
+| `staffing_rules`          | 「平日の朝は 2 人必要」というルール        | `models/rule.py`     |
 
 > **`users` と `employees` はなぜ別なのか？**
 > 「ログインできる人」と「シフトに入る人」は必ずしも一致しないためです。
@@ -425,11 +424,11 @@ class EmployeeRead(EmployeeBase):        # 【返却】用：id が付く
     id: int
 ```
 
-| クラス | いつ使う | ポイント |
-|--------|----------|----------|
-| `EmployeeCreate` | 画面 → サーバー（登録） | `id` を含まない（サーバーが採番するため） |
-| `EmployeeUpdate` | 画面 → サーバー（更新） | 全項目が `| None` ＝ **送られた項目だけ更新** |
-| `EmployeeRead` | サーバー → 画面（返却） | `id` 付き。DB のオブジェクトから変換できる |
+| クラス           | いつ使う                | ポイント                                   |
+| ---------------- | ----------------------- | ------------------------------------------ | --------------------------------- |
+| `EmployeeCreate` | 画面 → サーバー（登録） | `id` を含まない（サーバーが採番するため）  |
+| `EmployeeUpdate` | 画面 → サーバー（更新） | 全項目が `                                 | None` ＝ **送られた項目だけ更新** |
+| `EmployeeRead`   | サーバー → 画面（返却） | `id` 付き。DB のオブジェクトから変換できる |
 
 `ge=15, le=99` は **greater-equal（以上）/ less-equal（以下）** の略です。
 `age: 200` が送られてくると、**関数が呼ばれる前に** FastAPI が
@@ -560,10 +559,10 @@ def create_employee(
 > **「受け取るけど関数の中では使わない」** という Python の慣習です。
 > ここでは「チェックのためだけに書いている」ことを表しています。
 
-| 状態 | 返るコード | 意味 |
-|------|-----------|------|
-| トークンなし・期限切れ | `401 Unauthorized` | 「あなた誰？」 |
-| ログイン済みだが権限不足 | `403 Forbidden` | 「あなたは分かるが、それは許可できない」 |
+| 状態                     | 返るコード         | 意味                                     |
+| ------------------------ | ------------------ | ---------------------------------------- |
+| トークンなし・期限切れ   | `401 Unauthorized` | 「あなた誰？」                           |
+| ログイン済みだが権限不足 | `403 Forbidden`    | 「あなたは分かるが、それは許可できない」 |
 
 フロントの `client.ts` が `401` を受け取ったらログイン画面に飛ばすのは、この `401` です。
 
@@ -685,27 +684,27 @@ URL の `{employee_id}` の部分は **パスパラメータ** で、そのま�
 
 ### 7-3. 主な窓口の一覧
 
-| メソッド | URL | 権限 | 何をするか |
-|----------|-----|------|-----------|
-| `GET` | `/api/health` | 誰でも | 生存確認 |
-| `GET` | `/api/auth/google/login` | 誰でも | Google 認証へリダイレクト |
-| `GET` | `/api/auth/me` | ログイン | 自分の情報を返す |
-| `POST` | `/api/auth/dev-login` | 開発時のみ | 開発用の簡易ログイン |
-| `GET` | `/api/employees` | ログイン | 従業員一覧 |
-| `POST` | `/api/employees` | **管理者** | 従業員追加 |
-| `PATCH` | `/api/employees/{id}` | **管理者** | 従業員更新 |
-| `DELETE` | `/api/employees/{id}` | **管理者** | 従業員削除 |
-| `POST` | `/api/employees/availabilities` | ログイン | 休み希望の登録 |
-| `GET` | `/api/rules/patterns` | ログイン | シフトパターン一覧 |
-| `PUT` | `/api/rules/staffing` | **管理者** | 必要人員をまるごと差し替え |
-| `GET` | `/api/shifts?year=&month=` | ログイン | 指定月のシフト取得 |
-| `POST` | `/api/shifts/generate` | **管理者** | ★ AI でシフト自動生成 ★ |
-| `PUT` | `/api/shifts/{id}/assignments` | **管理者** | 手動で割り当てを差し替え |
-| `POST` | `/api/shifts/{id}/finalize` | **管理者** | シフトを確定状態にする |
-| `GET` | `/api/shifts/{id}/export/pdf` | ログイン | PDF ダウンロード |
-| `GET` | `/api/shifts/{id}/export/excel` | ログイン | Excel ダウンロード |
-| `GET` | `/api/payroll?year=&month=` | ログイン | 人件費レポート |
-| `POST` | `/api/dev/seed` / `/reset` | 開発時のみ | テストデータ投入 / 初期化 |
+| メソッド | URL                             | 権限       | 何をするか                 |
+| -------- | ------------------------------- | ---------- | -------------------------- |
+| `GET`    | `/api/health`                   | 誰でも     | 生存確認                   |
+| `GET`    | `/api/auth/google/login`        | 誰でも     | Google 認証へリダイレクト  |
+| `GET`    | `/api/auth/me`                  | ログイン   | 自分の情報を返す           |
+| `POST`   | `/api/auth/dev-login`           | 開発時のみ | 開発用の簡易ログイン       |
+| `GET`    | `/api/employees`                | ログイン   | 従業員一覧                 |
+| `POST`   | `/api/employees`                | **管理者** | 従業員追加                 |
+| `PATCH`  | `/api/employees/{id}`           | **管理者** | 従業員更新                 |
+| `DELETE` | `/api/employees/{id}`           | **管理者** | 従業員削除                 |
+| `POST`   | `/api/employees/availabilities` | ログイン   | 休み希望の登録             |
+| `GET`    | `/api/rules/patterns`           | ログイン   | シフトパターン一覧         |
+| `PUT`    | `/api/rules/staffing`           | **管理者** | 必要人員をまるごと差し替え |
+| `GET`    | `/api/shifts?year=&month=`      | ログイン   | 指定月のシフト取得         |
+| `POST`   | `/api/shifts/generate`          | **管理者** | ★ AI でシフト自動生成 ★    |
+| `PUT`    | `/api/shifts/{id}/assignments`  | **管理者** | 手動で割り当てを差し替え   |
+| `POST`   | `/api/shifts/{id}/finalize`     | **管理者** | シフトを確定状態にする     |
+| `GET`    | `/api/shifts/{id}/export/pdf`   | ログイン   | PDF ダウンロード           |
+| `GET`    | `/api/shifts/{id}/export/excel` | ログイン   | Excel ダウンロード         |
+| `GET`    | `/api/payroll?year=&month=`     | ログイン   | 人件費レポート             |
+| `POST`   | `/api/dev/seed` / `/reset`      | 開発時のみ | テストデータ投入 / 初期化  |
 
 > **`PUT /rules/staffing` が「まるごと差し替え」なのはなぜ？**
 > 必要人員は「平日×朝/夜/深夜」「休日×朝/夜/深夜」の 6 個で 1 セットの設定だからです。
@@ -862,12 +861,12 @@ status = solver.Solve(model)
 **20 秒の制限時間**が重要です。最適解を厳密に探すと何時間もかかる場合があるので、
 「20 秒探して、その時点で見つかっている一番良い答えを使う」という方針にしています。
 
-| status | 意味 | どうなる |
-|--------|------|----------|
-| `OPTIMAL` | 数学的に最適な解が見つかった | 採用 |
-| `FEASIBLE` | 制約は全部満たす解が見つかった（最適かは不明） | 採用 |
-| `INFEASIBLE` | **条件が矛盾していて解が存在しない** | 警告を返す |
-| `UNKNOWN` | 時間内に何も見つからなかった | 警告を返す |
+| status       | 意味                                           | どうなる   |
+| ------------ | ---------------------------------------------- | ---------- |
+| `OPTIMAL`    | 数学的に最適な解が見つかった                   | 採用       |
+| `FEASIBLE`   | 制約は全部満たす解が見つかった（最適かは不明） | 採用       |
+| `INFEASIBLE` | **条件が矛盾していて解が存在しない**           | 警告を返す |
+| `UNKNOWN`    | 時間内に何も見つからなかった                   | 警告を返す |
 
 ```python
 if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -990,7 +989,7 @@ async def derive_constraints_from_text(...) -> dict[str, Any]:
 
 ### 9-4. AI の返事の後始末
 
-```python
+````python
 def _parse_json(text: str) -> dict[str, Any]:
     text = text.strip()
     # trim markdown code fences if present
@@ -998,7 +997,7 @@ def _parse_json(text: str) -> dict[str, Any]:
         text = text.strip("`")
         ...
     return json.loads(text)
-```
+````
 
 「JSON だけ返して」と指示しても、AI は ` ```json ... ``` ` のように
 **マークダウンのコードブロックで囲んで返してくることがあります**。
@@ -1377,30 +1376,30 @@ cd backend && pytest
 
 この流れの中に、本ドキュメントで説明した要素がすべて登場します。
 
-| 要素 | 役割 | 出てきた章 |
-|------|------|-----------|
-| router | 窓口。材料集めと結果返却 | 7 |
-| schema（Pydantic） | 入出力の検証と整形 | 5 |
-| Depends / CurrentUser | ログイン・権限の関所 | 6 |
-| model（SQLAlchemy） | DB の表とのやり取り | 4 |
-| services/llm | 自然文 → 構造化制約 | 9 |
-| services/scheduler | CP-SAT でシフト生成 | 8 |
-| services/payroll | 人件費の計算 | 10 |
-| services/export | PDF / Excel 出力 | 11 |
+| 要素                  | 役割                     | 出てきた章 |
+| --------------------- | ------------------------ | ---------- |
+| router                | 窓口。材料集めと結果返却 | 7          |
+| schema（Pydantic）    | 入出力の検証と整形       | 5          |
+| Depends / CurrentUser | ログイン・権限の関所     | 6          |
+| model（SQLAlchemy）   | DB の表とのやり取り      | 4          |
+| services/llm          | 自然文 → 構造化制約      | 9          |
+| services/scheduler    | CP-SAT でシフト生成      | 8          |
+| services/payroll      | 人件費の計算             | 10         |
+| services/export       | PDF / Excel 出力         | 11         |
 
 ---
 
 ## 16. フロントエンドとの対応表
 
-| やりたいこと | フロント側 | バック側 |
-|-------------|-----------|---------|
-| 従業員一覧を出す | `stores/employee.ts` → `api.get('/employees')` | `routers/employees.py` の `list_employees` |
-| 従業員を追加する | `EmployeesView.vue` → `store.create()` | `routers/employees.py` の `create_employee` |
-| シフトを生成する | `ShiftTableView.vue` → `shiftStore.generate()` | `routers/shifts.py` の `generate_shift` |
-| 人件費を見る | `PayrollView.vue` → `fetchPayroll()` | `routers/payroll.py` → `services/payroll.py` |
-| PDF を落とす | `PrintPreviewView.vue` の `download()` | `routers/shifts.py` の `export_shift_pdf` |
-| データの形の定義 | `types/index.ts`（TypeScript） | `schemas/*.py`（Pydantic） |
-| ログイン状態の保持 | `stores/auth.ts`（localStorage） | `core/security.py`（JWT 発行・検証） |
+| やりたいこと       | フロント側                                     | バック側                                     |
+| ------------------ | ---------------------------------------------- | -------------------------------------------- |
+| 従業員一覧を出す   | `stores/employee.ts` → `api.get('/employees')` | `routers/employees.py` の `list_employees`   |
+| 従業員を追加する   | `EmployeesView.vue` → `store.create()`         | `routers/employees.py` の `create_employee`  |
+| シフトを生成する   | `ShiftTableView.vue` → `shiftStore.generate()` | `routers/shifts.py` の `generate_shift`      |
+| 人件費を見る       | `PayrollView.vue` → `fetchPayroll()`           | `routers/payroll.py` → `services/payroll.py` |
+| PDF を落とす       | `PrintPreviewView.vue` の `download()`         | `routers/shifts.py` の `export_shift_pdf`    |
+| データの形の定義   | `types/index.ts`（TypeScript）                 | `schemas/*.py`（Pydantic）                   |
+| ログイン状態の保持 | `stores/auth.ts`（localStorage）               | `core/security.py`（JWT 発行・検証）         |
 
 **`types/index.ts` と `schemas/` は、同じデータを両側から定義したもの** です。
 片方を変えたらもう片方も直す必要があります。
@@ -1409,37 +1408,37 @@ cd backend && pytest
 
 ## 付録：用語ミニ辞典
 
-| 用語 | かんたんな意味 |
-|------|----------------|
-| API | サーバーが提供する「お願いの窓口」 |
-| エンドポイント | 窓口 1 個。URL とメソッドの組み合わせ |
-| FastAPI | Python で API を作るライブラリ |
-| デコレータ | `@router.get(...)` のような、関数に付ける飾り |
-| ルーター | 窓口をグループにまとめたもの |
-| CORS | 別アドレスの画面からの通信を許可する設定 |
-| ORM | DB の表を Python のクラスとして扱う仕組み |
-| SQLAlchemy | このプロジェクトで使っている ORM |
-| モデル | DB の表の設計図（`models/`） |
-| スキーマ | やり取りする JSON の設計図（`schemas/`） |
-| Pydantic | スキーマ定義と入力検証のライブラリ |
-| マイグレーション | DB の設計変更を記録して適用すること（Alembic） |
-| セッション | DB との 1 回分のやり取り |
-| コミット | DB への変更を確定させること |
-| 外部キー | 「この列は別の表の ID です」という関連付け |
-| Depends | 「処理の前にこれを実行して」という依存性注入 |
-| JWT | 署名付きの通行証。ログイン状態の証明 |
-| OAuth 2.0 | 「Google でログイン」を実現する標準手順 |
-| 401 / 403 / 404 / 422 | 未認証 / 権限なし / 見つからない / 入力不正 |
-| CP-SAT | 制約を満たす答えを探す Google 製のソルバー |
-| ハード制約 | 絶対に守るルール |
-| ソフト制約 | できれば守りたい希望（点数で表現） |
-| 目的関数 | 「何を最小化／最大化したいか」の式 |
-| LLM | 大規模言語モデル。Claude や GPT のこと |
-| プロンプト | AI への指示文 |
-| 冪等性 | 何度実行しても結果が同じになる性質 |
-| `async` / `await` | 「時間のかかる処理を待つ」ための書き方 |
-| `yield` | 途中で一旦値を渡し、後で処理を再開する `return` |
+| 用語                  | かんたんな意味                                  |
+| --------------------- | ----------------------------------------------- |
+| API                   | サーバーが提供する「お願いの窓口」              |
+| エンドポイント        | 窓口 1 個。URL とメソッドの組み合わせ           |
+| FastAPI               | Python で API を作るライブラリ                  |
+| デコレータ            | `@router.get(...)` のような、関数に付ける飾り   |
+| ルーター              | 窓口をグループにまとめたもの                    |
+| CORS                  | 別アドレスの画面からの通信を許可する設定        |
+| ORM                   | DB の表を Python のクラスとして扱う仕組み       |
+| SQLAlchemy            | このプロジェクトで使っている ORM                |
+| モデル                | DB の表の設計図（`models/`）                    |
+| スキーマ              | やり取りする JSON の設計図（`schemas/`）        |
+| Pydantic              | スキーマ定義と入力検証のライブラリ              |
+| マイグレーション      | DB の設計変更を記録して適用すること（Alembic）  |
+| セッション            | DB との 1 回分のやり取り                        |
+| コミット              | DB への変更を確定させること                     |
+| 外部キー              | 「この列は別の表の ID です」という関連付け      |
+| Depends               | 「処理の前にこれを実行して」という依存性注入    |
+| JWT                   | 署名付きの通行証。ログイン状態の証明            |
+| OAuth 2.0             | 「Google でログイン」を実現する標準手順         |
+| 401 / 403 / 404 / 422 | 未認証 / 権限なし / 見つからない / 入力不正     |
+| CP-SAT                | 制約を満たす答えを探す Google 製のソルバー      |
+| ハード制約            | 絶対に守るルール                                |
+| ソフト制約            | できれば守りたい希望（点数で表現）              |
+| 目的関数              | 「何を最小化／最大化したいか」の式              |
+| LLM                   | 大規模言語モデル。Claude や GPT のこと          |
+| プロンプト            | AI への指示文                                   |
+| 冪等性                | 何度実行しても結果が同じになる性質              |
+| `async` / `await`     | 「時間のかかる処理を待つ」ための書き方          |
+| `yield`               | 途中で一旦値を渡し、後で処理を再開する `return` |
 
 ---
 
-*このドキュメントは `backend/app` 以下のソースコードをもとに作成した解説資料です。*
+_このドキュメントは `backend/app` 以下のソースコードをもとに作成した解説資料です。_
