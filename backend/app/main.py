@@ -24,7 +24,7 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health", tags=["meta"])
+@app.get("/api/health", tags=["Health Check"])
 def health() -> dict[str, str]:
     return {"status": "ok", "environment": settings.environment}
 
