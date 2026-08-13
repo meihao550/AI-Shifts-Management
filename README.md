@@ -21,23 +21,6 @@
 | F-5 | PDF / Excel 出力 | 印刷プレビュー画面から出力 |
 | F-6 | 認証 | Google Workspace OAuth（管理者/一般ロール） |
 
----
-
-## アーキテクチャ
-
-```
-┌────────────┐   HTTPS   ┌──────────────┐          ┌──────────────┐
-│ ブラウザ   │ ────────▶ │ Cloud Run    │  psycopg │ Supabase     │
-│ (Vue 3)    │           │ (FastAPI)    │ ───────▶ │ PostgreSQL   │
-└────────────┘           └──────┬───────┘          └──────────────┘
-                                │
-                                │ HTTPS
-                                ▼
-                    ┌─────────────────────┐
-                    │ Anthropic / OpenAI  │
-                    │ (LLM API)           │
-                    └─────────────────────┘
-```
 
 ---
 
@@ -101,8 +84,6 @@
 |---|---|---|
 | `SECRET_KEY` | JWT 署名鍵 | `openssl rand -hex 32` で生成 |
 | `DATABASE_URL` | Postgres 接続 | `postgresql+psycopg://shifts:shifts_password@db:5432/shifts_db` |
-| `GOOGLE_CLIENT_ID` | OAuth | Cloud Console で発行 |
-| `GOOGLE_CLIENT_SECRET` | OAuth | 同上 |
 | `LLM_PROVIDER` | LLM 切替 | `anthropic` / `openai` |
 | `ANTHROPIC_API_KEY` | Claude 用 | https://console.anthropic.com/ |
 | `OPENAI_API_KEY` | OpenAI 用 | https://platform.openai.com/ |
