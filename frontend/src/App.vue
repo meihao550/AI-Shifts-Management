@@ -34,6 +34,7 @@ onMounted(async () => {
 :root {
   --page-max-width: 1400px;
 }
+
 body {
   margin: 0;
   font-family:
@@ -44,11 +45,13 @@ body {
   background: #f6f7fb;
   color: #202226;
 }
+
 .app-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
+
 .app-main {
   flex: 1;
   padding: 24px;
