@@ -83,41 +83,51 @@ body {
 </style>
 ```
 
-# client.ts
+### サーバーと通信するためのお約束設定（Axious）
 
-###
+ここでは、画面（フロントエンド）とサーバー（バックエンド）がデータをやり取りするための「通信の基本ルール」を決めています。イメージとしては、**サーバーに手紙（データ）を届ける「専用の郵便屋さん」を作って、そのルールを教えている**ようなイメージです。
 
 ```vue
-import axios from 'axios' // axios本体を読み込み
+import axios from 'axios' const baseURL = import.meta.env.VITE_API_BASE_URL ||
+'http://localhost:8000' export const api = axios.create({ baseURL:
+`${baseURL}/api`, timeout: 30000, }) api.interceptors.request.use((config) => {
+const token = localStorage.getItem('token') if (token && config.headers) {
+config.headers.Authorization = `Bearer ${token}` } return config })
+api.interceptors.response.use( (r) => r, (err) => { if (err.response?.status ===
+401) { localStorage.removeItem('token') if
+(!window.location.pathname.startsWith('/login')) { window.location.href =
+'/login' } } return Promise.reject(err) }, )
 ```
 
-// APIのベースURLを環境変数から取得。なければローカルのAPIを使う
+①宛先（ベースURL）を決める
+
+```vue
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+```
 
-// axiosインスタンスを作成（共通設定をまとめる）
-export const api = axios.create({
-baseURL: `${baseURL}/api`, // すべてのリクエストの先頭に付くURL
-timeout: 30000, // タイムアウト３０秒
-})
+手紙を届けるための「基本の住所」です。本番環境の住所が設定されていればそれを使い、なければ自分のパソコンの住所（http://localhost:8000）を使います。
 
-// リクエストインターセプター（送信前に毎回実行される）
-api.interceptors.request.use((config) => {
-const token = localStorage.getItem('token') // ローカルストレージからJWT取得
-if (token && config.headers) {
-config.headers.Authorization = `Bearer ${token}`
-}
-return config
-})
+②専用の郵便屋さん（api）を作る
 
-api.interceptors.response.use(
-(r) => r,
-(err) => {
-if (err.response?.status === 401) {
-localStorage.removeItem('token')
-if (!window.location.pathname.startsWith('/login')) {
-window.location.href = '/login'
-}
-}
-return Promise.reject(err)
-},
-)
+```vue
+export const api = axios.create({ ... })
+```
+
+毎回長い住所を全部書くのは大変なので、「この住所に、３０秒以内に届けてね」というルールをあらかじめ覚えさせた、専門の郵便屋さん（api）を作成してます。
+
+③データを送る前（リクエスト）の自動チェック
+
+```vue
+api.interceptors.request.use(...)
+```
+
+手紙を送る直前に、必ず「身分証明書（トークン）」を持っているかチェックする仕組みです。もし持っていれば、手紙の封筒にその証明書をペタッと張り付けてからサーバーに送ります。これで「怪しい人じゃないと」とサーバーに伝わります。
+
+④データを受け取った（レスポンス）の自動チェック
+
+```vue
+api.interceptors.response.use(...)
+```
+
+サーバーから返事が返ってきた直後に行う処理です。
+もしサーバーから「身分証明書が期限切れだよ！（エラー401）」と弾かれてしまったら、今持っている古い証明書をゴミ箱に捨てて、強制的にログイン画面に戻す（もう一度証明書を取り直させる）仕組みになっています。
