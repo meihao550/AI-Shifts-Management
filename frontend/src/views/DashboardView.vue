@@ -50,10 +50,19 @@ const totalHoursForMe = computed(() => {
 })
 
 const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
+
+/* 
+  const showDeadlineNotive = day >= 26
+  このソースコードでdayという変数は day = today.getDate(); const today = new Date();
+  となっているため、閲覧者の端末のローカル時刻を返す。
+  これでも大丈夫だと思うが、時計を変えられると偽造できるため、ここのロジックの変更を考える。
+  [ローカル時刻を返す](https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/Date/getDate)
+*/
 const showDeadlineNotice = day >= 26
 </script>
 
 <template>
+  
   <div class="dashboard">
     <NAlert v-if="showDeadlineNotice" type="warning" show-icon>
       本日は {{ day }} 日です。翌月シフト作成の締切が近づいています。
