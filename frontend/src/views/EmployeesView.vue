@@ -36,6 +36,7 @@ const columns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
   { title: 'Email', key: 'email' },
+  { title: '有給', key: 'paid_leave_amount', render: (r)=> `¥${r.paid_leave_amount}`},
   { title: '年齢', key: 'age', width: 80 },
   { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
   { title: '交通費/日', key: 'transport_cost', width: 100, render: (r) => `¥${r.transport_cost}` },
@@ -81,11 +82,13 @@ const columns: DataTableColumns<Employee> = [
   },
 ]
 
+// 新規従業員登録の際の初期値
 function openCreate() {
   form.value = {
     name: '',
     email: null,
     age: null,
+    paid_leave_amount: 0,
     transport_cost: 0,
     hourly_wage: 1200,
     main_shift_type: 'morning',
@@ -100,6 +103,7 @@ function openEdit(row: Employee) {
   form.value = { ...row }
   showEdit.value = true
 }
+
 
 async function save() {
   try {
@@ -123,6 +127,7 @@ async function remove(id: number) {
     message.error(`削除失敗: ${(e as Error).message}`)
   }
 }
+
 </script>
 
 <template>
@@ -149,6 +154,9 @@ async function remove(id: number) {
         </NFormItem>
         <NFormItem label="交通費/日 (円)">
           <NInputNumber v-model:value="form.transport_cost" :min="0" style="width: 100%" />
+        </NFormItem>
+        <NFormItem label="有給金額">
+          <NInputNumber v-model:value="form.paid_leave_amount" :min="0" style="width: 100%" />
         </NFormItem>
         <NFormItem label="メインシフト">
           <NSelect v-model:value="form.main_shift_type" :options="shiftOptions" clearable />
