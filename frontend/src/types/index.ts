@@ -14,6 +14,7 @@ export interface Employee {
   name: string
   email: string | null
   age: number | null
+  paid_leave_amount: number
   transport_cost: number
   hourly_wage: number
   main_shift_type: string | null
