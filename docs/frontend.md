@@ -94,60 +94,104 @@ body {
 
 # client.ts
 
-###
+このファイルは、フロントエンドからバックエンドAPIにアクセスするためのAxios(HTTP通信ライブラリ)を設定するためのファイルです。
+
+・モジュールの読み込み
 
 ```vue
-import axios from 'axios' // axios本体を読み込み
+import axios from 'axios'
 ```
 
-// APIのベースURLを環境変数から取得。なければローカルのAPIを使う
+・axios：HTTP通信を簡単に扱うためのライブラリ
+・fetchより扱いやすく、設定を共通化できる
+・このファイル全体で使うために読み込んでいる
+
+・ベースURLの設定
+
+```vue
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+```
 
-// axiosインスタンスを作成（共通設定をまとめる）
-export const api = axios.create({
-baseURL: `${baseURL}/api`, // すべてのリクエストの先頭に付くURL
-timeout: 30000, // タイムアウト３０秒
+・import.meta,evn.VITE_API_BASE_URL
+→Vite(フロント環境)が.evnから読み込む環境変数
+→本番環境・開発環境でAPIのURLを切り替えるために使う
+・||'http://localhost:8000'
+→環境変数がない場合の予備の値
+→ローカルでFastAPIを動かすときのURL
+
+・Axiosインスタンスの作成
+
+```vue
+export const api = axios.create({ baseURL: `${baseURL}/api`, timeout: 30000, //
 })
+```
 
-// リクエストインターセプター（送信前に毎回実行される）
-api.interceptors.request.use((config) => {
-const token = localStorage.getItem('token') // ローカルストレージからJWT取得
-if (token && config.headers) {
-config.headers.Authorization = `Bearer ${token}`
-}
-return config
-})
+・axios.create()
+→共通設定を持った「専用のaxiosクライアント」を作る
+→毎回設定を書かなくてよくなる
+・baseURL
+→全てのAPIリクエストの先頭に付くURL
+→/employeesにアクセスすると
+実際にはhttp://localhost:8000/api/emloyeesになる
+・timeout:30000
+→30秒で通信をあきらめる設定
+→APIが落ちているときに無限待ちにならないようにする
 
-api.interceptors.response.use(
-(r) => r,
-(err) => {
-if (err.response?.status === 401) {
-localStorage.removeItem('token')
-if (!window.location.pathname.startsWith('/login')) {
-window.location.href = '/login'
-}
-}
-return Promise.reject(err)
-},
-)
+・リクエストインターセプター(リクエストが送信される長句全に毎回実行される処理)
 
-````
+```vue
+api.interceptors.request.use((config) => { const token =
+localStorage.getItem('token') // ローカルストレージからJWT取得 if (token &&
+config.headers) { config.headers.Authorization = `Bearer ${token}` } return
+config })
+```
 
+・interceptors.request.use()
+→リクエスト前に毎回実行される前処理
+・localStorage.getItem('token')
+→ログインしたときに保存したJMTを取り出す
+・Authorization:Bearer<token>
+→認証が必要なAPIにアクセスするための標準的な書き方
+→これがあると「ログイン済みのユーザー」として扱われる
+毎回主導でヘッダーを書く必要がなくなり、ログイン後のAPI通信がすべて自動で認証付きになります
 
+・レスポンスインターセプター(レスポンスを受け取った直後に毎回実行される処理)
+
+```vue
+api.interceptors.response.use( (r) => r, (err) => { if (err.response?.status ===
+401) { localStorage.removeItem('token') if
+(!window.location.pathname.startsWith('/login')) { window.location.href =
+'/login' } } return Promise.reject(err) }, )
+```
+
+・interceptors.response.use()
+→レスポンス後に毎回実行される後処理
+・401(Unauthorized)
+→認証切れ・トークン期限切れの時に返されるステータスコード
+・localStorage.removeItem('token')
+→古いトークンを削除してログアウト状態に戻す
+・window.location.href='login'
+→ログインページへ強制的に移動させる
+→セッションが切れたときに自動でログイン画面に戻せる
+これがあると、セッション管理が楽になり、ユーザーが知らないうちにログアウト状態で操作する事故を防げる
 
 ---
+
 ---
+
 # eslint.config.js
+
 -[eslintとは](https://eslint.vuejs.org/user-guide/) (typescript-eslintとPrettierを使用した設定例参照)
 
 ### 設定の定義
+
 ```vue
-
-import vue from 'eslint-plugin-vue'                          //VueのコードをESLintでチェックできるようにする
-import ts from '@vue/eslint-config-typescript'               //TypeScriptを使ったESLintを設定する
-import prettier from '@vue/eslint-config-prettier'           //EslintとPrettierのルールの衝突を防ぐ--①
-
-````
+import vue from 'eslint-plugin-vue'
+//VueのコードをESLintでチェックできるようにする import ts from
+'@vue/eslint-config-typescript' //TypeScriptを使ったESLintを設定する import
+prettier from '@vue/eslint-config-prettier'
+//EslintとPrettierのルールの衝突を防ぐ--①
+```
 
 -[①：](https://github.com/vuejs/eslint-config-prettier)参照
 
