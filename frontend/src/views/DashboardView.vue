@@ -14,16 +14,18 @@ import {
 } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notification'
 
 const shiftStore = useShiftStore()
 const auth = useAuthStore()
+const notification = useNotificationStore()
+
 const router = useRouter()
 const loading = ref(false)
 
 const today = new Date()
 const year = today.getFullYear()
 const month = today.getMonth() + 1
-const day = today.getDate()
 
 const monthLabel = `${year}年${month}月`
 
@@ -34,6 +36,7 @@ onMounted(async () => {
     if (shiftStore.shift) {
       await shiftStore.fetchPayroll(year, month)
     }
+    await notification.fetch() // 通知を仕込む
   } finally {
     loading.value = false
   }
@@ -50,22 +53,18 @@ const totalHoursForMe = computed(() => {
 })
 
 const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
-
-/* 
-  const showDeadlineNotive = day >= 26
-  このソースコードでdayという変数は day = today.getDate(); const today = new Date();
-  となっているため、閲覧者の端末のローカル時刻を返す。
-  これでも大丈夫だと思うが、時計を変えられると偽造できるため、ここのロジックの変更を考える。
-  [ローカル時刻を返す](https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/Date/getDate)
-*/
-const showDeadlineNotice = day >= 26
 </script>
 
 <template>
-  
   <div class="dashboard">
-    <NAlert v-if="showDeadlineNotice" type="warning" show-icon>
-      本日は {{ day }} 日です。翌月シフト作成の締切が近づいています。
+    <NAlert
+      v-for="n in notification.items"
+      :key="n.kind"
+      :type="n.level"
+      show-icon
+      style="margin-bottom: 12px"
+    >
+        {{ n.message }}
     </NAlert>
 
     <NGrid :x-gap="16" :y-gap="16" :cols="3" responsive="screen">
