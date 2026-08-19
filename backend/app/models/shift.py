@@ -87,6 +87,6 @@ class ShiftAssignment(Base):
     crosses_midnight: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     shift: Mapped[Shift] = relationship("Shift", back_populates="assignments")
-    employee: Mapped[Employee] = relationship(  # noqa: F821
+    employee: Mapped = relationship(  # noqa: F821
         "Employee", back_populates="assignments"
     )
