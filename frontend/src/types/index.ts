@@ -1,3 +1,5 @@
+// 型の宣言をしているファイル
+
 export type UserRole = 'admin' | 'employee'
 
 export interface Me {
@@ -111,4 +113,14 @@ export interface GenerateShiftResult {
   solver_seconds: number
   llm_derived_constraints: Record<string, unknown> | null
   warnings: string[]
+}
+
+// 通知の型をつくる
+// Notificationクラスじゃない理由としてNotificationはweb通知APIの予約語となっているため
+export interface AppNotification {
+  kind: string
+  level: 'warning' | 'info' | 'success' | 'error'
+  message: string
+  target_year: number | null
+  target_month: number | null
 }
