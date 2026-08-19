@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
+# draftはシフトが確定していない段階。publishedはシフトが出来上がって公開されている状態。finalizedは完全に確定された状態
 class ShiftStatus(StrEnum):
     draft = "draft"
     published = "published"

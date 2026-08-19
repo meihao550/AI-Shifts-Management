@@ -44,4 +44,4 @@ def build_notifications(db: Session, today: date) -> list[Notification]:
                     target_month=m,
                 )
             )
-        return result
+    return result
