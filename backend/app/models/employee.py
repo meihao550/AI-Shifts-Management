@@ -43,6 +43,8 @@ class Employee(Base):
     main_shift_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # 週に何回入るか
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    # 有給
+    paid_leave_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     role: Mapped[EmployeeRole] = mapped_column(
         SAEnum(EmployeeRole, name="employee_role"),
         default=EmployeeRole.employee,

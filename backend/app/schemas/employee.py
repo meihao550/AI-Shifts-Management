@@ -15,6 +15,7 @@ class EmployeeBase(BaseModel):
     weekly_shifts: int = Field(default=3, ge=0, le=7)
     role: EmployeeRole = EmployeeRole.employee
     active: bool = True
+    paid_leave_amount: int = Field(default=0, ge=0)
 
 
 class EmployeeCreate(EmployeeBase):
