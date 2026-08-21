@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import auth, dev, employees, notifications, payroll, rules, shifts
+from app.routers import auth, dev, employees, notifications, pairs, payroll, rules, shifts
 
 settings = get_settings()
 
@@ -36,3 +36,4 @@ app.include_router(shifts.router, prefix="/api")
 app.include_router(payroll.router, prefix="/api")
 app.include_router(dev.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(pairs.router, prefix="/api")
