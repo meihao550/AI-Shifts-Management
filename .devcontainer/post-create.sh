@@ -5,7 +5,7 @@ set -uo pipefail
 
 echo "==> Installing backend Python dependencies..."
 cd /workspace/backend
-if ! uv sync 2>&1; then
+if ! uv sync --extra dev 2>&1; then
   echo "   uv sync failed, falling back to pip"
   pip install --user -e ".[dev]" || echo "   pip install も失敗。ターミナルで手動再試行してください。"
 fi
@@ -20,18 +20,10 @@ if [ ! -f /workspace/.env ]; then
   echo "   Created /workspace/.env — remember to fill in secrets."
 fi
 
-echo "==> Creating backend/.env from example if missing..."
-if [ ! -f /workspace/backend/.env ]; then
-  cp /workspace/backend/.env.example /workspace/backend/.env
-  # devcontainer 内から backend を直接動かす時は host を compose のサービス名 db にする
-  sed -i 's#@localhost:5432#@db:5432#' /workspace/backend/.env
-  echo "   Created /workspace/backend/.env (host=db)"
-fi
-
 echo "==> Running database migrations..."
 cd /workspace/backend
 DATABASE_URL=postgresql+psycopg://shifts:shifts_password@db:5432/shifts_db \
-  uv run alembic upgrade head || echo "   (migrations skipped: DB may not be ready)"
+  uv run alembic upgrade head || echo "   (migrations skipped: DBが起動していないかもしれません)"
 
 cat <<'EOF'
 
