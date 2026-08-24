@@ -32,12 +32,12 @@ from app.services.holidays import category_for
 @dataclass(frozen=True)
 class PatternSpec:
     id: int
-    code: str
-    label: str
-    start: time
-    end: time
+    code: str  # 内部の名前
+    label: str  # 表示名
+    start: time  # 開始時刻
+    end: time  # 終了時刻
     category: str  # morning|evening|night
-    is_basic: bool
+    is_basic: bool  # 基本パターンかどうか
 
 
 @dataclass(frozen=True)
