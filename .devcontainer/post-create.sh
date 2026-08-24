@@ -5,7 +5,7 @@ set -uo pipefail
 
 echo "==> Installing backend Python dependencies..."
 cd /workspace/backend
-if ! uv sync 2>&1; then
+if ! uv sync --extra dev 2>&1; then
   echo "   uv sync failed, falling back to pip"
   pip install --user -e ".[dev]" || echo "   pip install も失敗。ターミナルで手動再試行してください。"
 fi
@@ -23,7 +23,7 @@ fi
 echo "==> Running database migrations..."
 cd /workspace/backend
 DATABASE_URL=postgresql+psycopg://shifts:shifts_password@db:5432/shifts_db \
-  uv run alembic upgrade head || echo "   (migrations skipped: DB may not be ready)"
+  uv run alembic upgrade head || echo "   (migrations skipped: DBが起動していないかもしれません)"
 
 cat <<'EOF'
 
