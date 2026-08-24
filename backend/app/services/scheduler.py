@@ -84,6 +84,7 @@ class ShiftScheduler:
         staffing_rules: dict[tuple[str, str], int],
         availabilities: list[AvailabilitySpec],
         llm_constraints: LLMConstraints | None = None,
+        forbidden_pairs: list[tuple[int, int]] | None = None,  # 渡さなければNoneになる
         max_solve_seconds: float = 20.0,
     ) -> None:
         self.year = year
@@ -93,6 +94,7 @@ class ShiftScheduler:
         self.staffing_rules = staffing_rules
         self.availabilities = availabilities
         self.llm = llm_constraints or LLMConstraints()
+        self.forbidden_pairs = forbidden_pairs or []
         self.max_solve_seconds = max_solve_seconds
 
     def _days_in_month(self) -> list[date]:
@@ -120,6 +122,7 @@ class ShiftScheduler:
                 s.add((a.employee_id, a.target_date, a.shift_type))
         return s
 
+    # 制約をつくる
     def solve(self) -> SchedulerResult:
         warnings: list[str] = []
         model = cp_model.CpModel()
@@ -177,9 +180,7 @@ class ShiftScheduler:
         penalties: list[cp_model.IntVar] = []
         for e in emps:
             weekly = max_shifts_override.get(e.id, e.weekly_target)
-            monthly_target = max(
-                0, weekly * (len(days) // 7 + (1 if len(days) % 7 else 0))
-            )
+            monthly_target = max(0, weekly * (len(days) // 7 + (1 if len(days) % 7 else 0)))
             total = sum(x[(e.id, d, p.id)] for d in days for p in pats)
             over = model.NewIntVar(0, len(days), f"over_e{e.id}")
             under = model.NewIntVar(0, len(days), f"under_e{e.id}")
@@ -195,6 +196,18 @@ class ShiftScheduler:
                     continue
                 if (eid, d, p.id) in x:
                     bonus_terms.append(x[(eid, d, p.id)])
+
+        """禁止ペア（人間関係などによる）は同じ日・同じ区分に同時配置しない"""
+        # 内包表記を使ってもいいとAIの指示があったが、初心者が多いプロジェクトのため、内包表記をやめ、簡単な記法にした
+        # 従業員を取り出す
+        active_employees = set()
+        for emp in emps:
+            active_employees.add(emp.id)
+
+            for day in days:
+                for pat in pats:
+                    
+
 
         # Soft main_shift_type bonus:
         # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
