@@ -82,7 +82,7 @@ class ShiftScheduler:
         employees: list[EmployeeSpec],
         patterns: list[PatternSpec],
         staffing_rules: dict[tuple[str, str], int],
-        availabilities: list[AvailabilitySpec],
+        availabilities: list[AvailabilitySpec],  # 従業員のシフト希望リスト
         llm_constraints: LLMConstraints | None = None,
         forbidden_pairs: list[tuple[int, int]] | None = None,  # 渡さなければNoneになる
         max_solve_seconds: float = 20.0,
