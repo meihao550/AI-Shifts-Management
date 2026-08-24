@@ -44,8 +44,8 @@ class PatternSpec:
 class EmployeeSpec:
     id: int
     name: str
-    weekly_target: int
-    main_shift_type: str | None
+    weekly_target: int  # 週に何回入りたいか
+    main_shift_type: str | None  # メインのシフト: Noneの場合もある
     hourly_wage: int
 
 
@@ -200,14 +200,14 @@ class ShiftScheduler:
         """禁止ペア（人間関係などによる）は同じ日・同じ区分に同時配置しない"""
         # 内包表記を使ってもいいとAIの指示があったが、初心者が多いプロジェクトのため、内包表記をやめ、簡単な記法にした
         # 従業員を取り出す
-        active_employees = set()
-        for emp in emps:
-            active_employees.add(emp.id)
+        # active_employees = set()
+        # for emp in emps:
+        #    active_employees.add(emp.id)
 
-            for day in days:
-                for pat in pats:
-                    
+        # for day in days:
+        #    for pat in pats:
 
+        # for a_id, b_id in self.forbidden_pairs:
 
         # Soft main_shift_type bonus:
         # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
