@@ -117,3 +117,39 @@ def test_load_is_balanced_across_employees():
     values = list(counts.values())
     assert min(values) >= 1  # 誰も 0 枠にならない
     assert max(values) - min(values) <= 2  # 偏りが小さい
+
+
+def test_pinned_employee_only_gets_main_category():
+    """メイン固定(ピン)した従業員は、メイン区分以外には配置されない（絶対遵守）。"""
+    a = EmployeeSpec(
+        id=1,
+        name="A",
+        weekly_target=7,
+        main_shift_type="morning",
+        hourly_wage=1000,
+        main_shift_pinned=True,
+    )
+    b = EmployeeSpec(
+        id=2, name="B", weekly_target=7, main_shift_type=None, hourly_wage=1000
+    )
+    scheduler = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[a, b],
+        patterns=[MORNING, EVENING],
+        staffing_rules={
+            ("weekday", "morning"): 1,
+            ("weekday", "evening"): 1,
+            ("weekend_or_holiday", "morning"): 1,
+            ("weekend_or_holiday", "evening"): 1,
+        },
+        availabilities=[],
+        max_solve_seconds=10.0,
+    )
+    result = scheduler.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    code_to_category = {MORNING.code: MORNING.category, EVENING.code: EVENING.category}
+    for asg in result.assignments:
+        if asg["employee_id"] == 1:  # ピンした A はメイン区分(morning)のみ
+            assert code_to_category[asg["shift_type"]] == "morning"

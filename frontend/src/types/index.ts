@@ -20,6 +20,7 @@ export interface Employee {
   transport_cost: number
   hourly_wage: number
   main_shift_type: string | null
+  main_shift_pinned: boolean
   weekly_shifts: number
   role: UserRole
   active: boolean

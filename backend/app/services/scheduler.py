@@ -54,6 +54,7 @@ class EmployeeSpec:
     weekly_target: int  # 週に何回入りたいか
     main_shift_type: str | None  # メインのシフト: Noneの場合もある
     hourly_wage: int
+    main_shift_pinned: bool = False  # True ならメイン区分のみに配置(ハード制約)
 
 
 @dataclass
@@ -164,6 +165,14 @@ class ShiftScheduler:
                 if (e.id, d) in unavailable:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
+
+        # Hard: メインシフトをピン留めした従業員は、メイン区分以外に配置しない（絶対遵守）
+        for e in emps:
+            if e.main_shift_pinned and e.main_shift_type:
+                for d in days:
+                    for p in pats:
+                        if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
+                            model.Add(x[(e.id, d, p.id)] == 0)
 
         # Constraint: required staffing per (date, shift_category)
         for d in days:
