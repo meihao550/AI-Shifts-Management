@@ -84,7 +84,7 @@ class ShiftScheduler:
         staffing_rules: dict[tuple[str, str], int],
         availabilities: list[AvailabilitySpec],  # 従業員のシフト希望リスト
         llm_constraints: LLMConstraints | None = None,
-        forbidden_pairs: list[tuple[int, int]] | None = None,  # 渡さなければNoneになる
+        forbidden_pairs: list[tuple[int, int]] | None = None,  # 同時配置しない従業員の組
         max_solve_seconds: float = 20.0,
     ) -> None:
         self.year = year
@@ -197,17 +197,23 @@ class ShiftScheduler:
                 if (eid, d, p.id) in x:
                     bonus_terms.append(x[(eid, d, p.id)])
 
-        """禁止ペア（人間関係などによる）は同じ日・同じ区分に同時配置しない"""
-        # 内包表記を使ってもいいとAIの指示があったが、初心者が多いプロジェクトのため、内包表記をやめ、簡単な記法にした
-        # 従業員を取り出す
-        # active_employees = set()
-        # for emp in emps:
-        #    active_employees.add(emp.id)
-
-        # for day in days:
-        #    for pat in pats:
-
-        # for a_id, b_id in self.forbidden_pairs:
+        # ハード制約：禁止ペア（人間関係などによる）は同じ日・同じ区分に同時配置しない（H-6）
+        active_ids = {e.id for e in emps}
+        for a_id, b_id in self.forbidden_pairs:
+            # 今回の対象でない従業員（退職者など）を含む組は無視する
+            if a_id not in active_ids or b_id not in active_ids:
+                continue
+            for d in days:
+                for cat in ("morning", "evening", "night"):
+                    pats_c = [p for p in pats if p.category == cat]
+                    if not pats_c:
+                        continue
+                    # a と b がこの区分に入る数の合計は最大 1（= 2 人同時は不可）
+                    model.Add(
+                        sum(x[(a_id, d, p.id)] for p in pats_c)
+                        + sum(x[(b_id, d, p.id)] for p in pats_c)
+                        <= 1
+                    )
 
         # Soft main_shift_type bonus:
         # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。

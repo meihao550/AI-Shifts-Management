@@ -12,9 +12,9 @@ class EmployeePairConstraint(Base):
     __tablename__ = "employee_pair_constraints"  # テーブル名の指定
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    employees_a_id: Mapped[int] = mapped_column(
+    employee_a_id: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
     )
-    employees_b_id: Mapped[int] = mapped_column(
+    employee_b_id: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
     )

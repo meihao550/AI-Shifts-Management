@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Edit",
       "Bash(brew list *)",
       "Bash(python3 -c \"import PyPDF2; print\\(PyPDF2.__version__\\)\")",
       "Bash(python3 -c \"import pypdf; print\\(pypdf.__version__\\)\")",
@@ -65,7 +66,8 @@
       "Bash(gh label *)",
       "Bash(git ls-remote *)",
       "Bash(kill %1)",
-      "Bash(pkill -f bft2chkwy)"
+      "Bash(pkill -f bft2chkwy)",
+      "Bash(uv run *)"
     ]
   }
 }
