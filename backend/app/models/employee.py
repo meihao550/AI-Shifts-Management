@@ -41,6 +41,8 @@ class Employee(Base):
     hourly_wage: Mapped[int] = mapped_column(Integer, default=1100, nullable=False)
     # メインで入るシフト種別 (morning/evening/night 等)
     main_shift_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # メインシフトを絶対遵守（ピン）。True ならメイン区分のみに配置するハード制約にする
+    main_shift_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 週に何回入るか
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     # 有給

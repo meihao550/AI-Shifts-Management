@@ -48,6 +48,12 @@ const columns: DataTableColumns<Employee> = [
       ({ morning: '朝', evening: '夜', night: '深夜' })[r.main_shift_type ?? ''] ??
       (r.main_shift_type ?? '-'),
   },
+  {
+    title: 'ピン',
+    key: 'main_shift_pinned',
+    width: 60,
+    render: (r) => (r.main_shift_pinned ? '📌' : ''),
+  },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
   {
     title: 'ロール',
@@ -92,6 +98,7 @@ function openCreate() {
     transport_cost: 0,
     hourly_wage: 1200,
     main_shift_type: 'morning',
+    main_shift_pinned: false,
     weekly_shifts: 3,
     role: 'employee',
     active: true,
@@ -160,6 +167,12 @@ async function remove(id: number) {
         </NFormItem>
         <NFormItem label="メインシフト">
           <NSelect v-model:value="form.main_shift_type" :options="shiftOptions" clearable />
+        </NFormItem>
+        <NFormItem label="メイン固定(ピン)">
+          <NSwitch v-model:value="form.main_shift_pinned" />
+          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
+            ONで「メイン区分のみ」に配置（絶対遵守）
+          </span>
         </NFormItem>
         <NFormItem label="週勤務回数">
           <NInputNumber v-model:value="form.weekly_shifts" :min="0" :max="7" style="width: 100%" />
