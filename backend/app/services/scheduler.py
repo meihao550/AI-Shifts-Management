@@ -21,7 +21,7 @@ from __future__ import annotations
 import calendar
 import time as _time
 from dataclasses import dataclass, field
-from datetime import date, time
+from datetime import date, time, timedelta
 from typing import Any
 
 from ortools.sat.python import cp_model
@@ -34,6 +34,8 @@ from app.services.holidays import category_for
 BALANCE_WEIGHT = 50
 PREFERENCE_WEIGHT = 1
 MAIN_SHIFT_WEIGHT = 1
+# 新規採用者の想定 週勤務回数（人手不足時の推奨採用人数の計算に使用）
+DEFAULT_NEW_HIRE_WEEKLY = 5
 
 
 @dataclass(frozen=True)
@@ -193,6 +195,13 @@ class ShiftScheduler:
         max_shifts_override = {
             int(k): int(v) for k, v in self.llm.max_shifts_per_week_override.items()
         }
+        # 日曜起点で週にグルーピング（採用推奨の「対応可能数」計算に使用）
+        weeks: dict[date, list[date]] = {}
+        for d in days:
+            week_start = d - timedelta(days=(d.weekday() + 1) % 7)
+            weeks.setdefault(week_start, []).append(d)
+
+        # Constraint: 月間の目標(週回数×週数)に近づける(ソフト)。分配の均等化は後段の balance で。
         penalties: list[cp_model.IntVar] = []
         loads: list[Any] = []
         for e in emps:
@@ -201,12 +210,32 @@ class ShiftScheduler:
             total = sum(x[(e.id, d, p.id)] for d in days for p in pats)
             loads.append(total)
             over = model.NewIntVar(0, len(days), f"over_e{e.id}")
-            # under の上限は目標値。len(days) 固定だと目標>日数のときに式が成立せず、
-            # 意図しない最低勤務数が強制される不具合になる。
             under = model.NewIntVar(0, monthly_target, f"under_e{e.id}")
             model.Add(total - monthly_target == over - under)
             penalties.append(over)
             penalties.append(under)
+
+        # 人手不足チェック: 必要シフト総数 > 従業員の対応可能総数 なら採用を推奨
+        required_total = sum(
+            self.staffing_rules.get((category_for(d), cat), 0)
+            for d in days
+            for cat in ("morning", "evening", "night")
+        )
+        capacity_total = 0
+        for e in emps:
+            weekly_cap = max_shifts_override.get(e.id, e.weekly_target)
+            for wdays in weeks.values():
+                avail = sum(1 for d in wdays if (e.id, d) not in unavailable)
+                capacity_total += min(weekly_cap, avail)
+        if required_total > capacity_total:
+            shortage = required_total - capacity_total
+            per_new_hire = max(1, len(weeks) * DEFAULT_NEW_HIRE_WEEKLY)
+            hire = (shortage + per_new_hire - 1) // per_new_hire
+            warnings.append(
+                f"人手不足の可能性: 今月の必要シフト {required_total} 件に対し、"
+                f"従業員の対応可能数は約 {capacity_total} 件です。"
+                f"全ての枠を満たすには、あと約 {hire} 人の採用を検討してください。"
+            )
 
         # Soft preference bonus
         bonus_terms = []

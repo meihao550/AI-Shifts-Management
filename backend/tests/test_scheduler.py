@@ -153,3 +153,21 @@ def test_pinned_employee_only_gets_main_category():
     for asg in result.assignments:
         if asg["employee_id"] == 1:  # ピンした A はメイン区分(morning)のみ
             assert code_to_category[asg["shift_type"]] == "morning"
+
+
+def test_staffing_shortage_recommends_hiring():
+    """必要人数に対し従業員が足りないとき、採用を促す警告が出る。"""
+    scheduler = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[_employee(1, "A")],  # 1 人だけ
+        patterns=[MORNING],
+        staffing_rules={
+            ("weekday", "morning"): 2,
+            ("weekend_or_holiday", "morning"): 2,
+        },  # 毎日 2 人必要なのに 1 人しかいない
+        availabilities=[],
+        max_solve_seconds=5.0,
+    )
+    result = scheduler.solve()
+    assert any("採用" in w for w in result.warnings)
