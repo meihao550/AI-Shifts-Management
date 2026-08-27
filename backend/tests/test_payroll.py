@@ -44,6 +44,20 @@ def test_calculate_payroll_night_shift_with_premium():
     assert row.overnight_premium == int(4 * 1200 * 0.25)
 
 
+def test_employee_without_assignment_appears_with_zero():
+    # 割当のない従業員も 0 円の行として一覧に含まれる（集計漏れの回帰防止）
+    emp1 = _make_employee(1, "田中")
+    emp2 = _make_employee(2, "佐藤")
+    a = _make_assignment(1, "2025-06-02", "09:00", "17:00")  # emp1 のみ勤務
+    report = calculate_payroll(2025, 6, [a], {1: emp1, 2: emp2})
+
+    assert len(report.rows) == 2
+    by_id = {r.employee_id: r for r in report.rows}
+    assert by_id[2].total_hours == 0.0
+    assert by_id[2].grand_total == 0
+    assert by_id[2].insurance_status == "none"
+
+
 def test_calculate_payroll_insurance_thresholds():
     emp = _make_employee(1, "田中")
     # 120時間 = social

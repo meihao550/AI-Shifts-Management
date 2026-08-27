@@ -87,10 +87,10 @@ def calculate_payroll(
     rows: list[PayrollRow] = []
     per_day_totals: dict[date, dict[str, int]] = defaultdict(lambda: {"total_cost": 0, "headcount": 0})
 
-    for emp_id, emp_assignments in by_emp.items():
-        emp = employees_by_id.get(emp_id)
-        if not emp:
-            continue
+    # 割当のある従業員だけでなく、渡された全従業員を集計する。
+    # 0 出勤の従業員も 0 円の行として表示する（集計から漏れないようにする）。
+    for emp_id, emp in sorted(employees_by_id.items()):
+        emp_assignments = by_emp.get(emp_id, [])
 
         total_hours = 0.0
         overnight_hours = 0.0
