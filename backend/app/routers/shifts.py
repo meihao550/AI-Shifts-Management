@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
 from app.models.employee import Employee, EmployeeAvailability
+from app.models.pair import EmployeePairConstraint
 from app.models.rule import DayCategory, ShiftPattern, StaffingRule
 from app.models.shift import Shift, ShiftAssignment, ShiftStatus
 from app.schemas.shift import (
@@ -127,6 +128,10 @@ async def generate_shift(
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
 
+    # 禁止ペア（ハード制約 H-6）を読み込み、(a_id, b_id) のタプル列にする
+    pair_rows = list(db.execute(select(EmployeePairConstraint)).scalars())
+    forbidden_pairs = [(p.employee_a_id, p.employee_b_id) for p in pair_rows]
+
     max_daily_demand = max(
         staffing_map.get(("weekday", "morning"), 0)
         + staffing_map.get(("weekday", "evening"), 0)
@@ -197,6 +202,7 @@ async def generate_shift(
             for a in availability_rows
         ],
         llm_constraints=llm_constraints,
+        forbidden_pairs=forbidden_pairs,
     )
     result = scheduler.solve()
 
@@ -209,9 +215,7 @@ async def generate_shift(
     db.commit()
 
     saved = db.execute(
-        select(Shift)
-        .options(selectinload(Shift.assignments))
-        .where(Shift.id == shift.id)
+        select(Shift).options(selectinload(Shift.assignments)).where(Shift.id == shift.id)
     ).scalar_one()
 
     return ShiftGenerateResult(
