@@ -28,6 +28,13 @@ from ortools.sat.python import cp_model
 
 from app.services.holidays import category_for
 
+# 目的関数の重み。平準化(S-6)を最優先にし、希望/メインシフト(S-1/S-5)は
+# 「同じくらい公平な解の中での寄せ」程度の弱いタイブレーカーに留める。
+# こうしないと、メインシフト偏重で特定カテゴリの枠不足に引きずられ分配が偏る。
+BALANCE_WEIGHT = 50
+PREFERENCE_WEIGHT = 1
+MAIN_SHIFT_WEIGHT = 1
+
 
 @dataclass(frozen=True)
 class PatternSpec:
@@ -178,12 +185,16 @@ class ShiftScheduler:
             int(k): int(v) for k, v in self.llm.max_shifts_per_week_override.items()
         }
         penalties: list[cp_model.IntVar] = []
+        loads: list[Any] = []
         for e in emps:
             weekly = max_shifts_override.get(e.id, e.weekly_target)
             monthly_target = max(0, weekly * (len(days) // 7 + (1 if len(days) % 7 else 0)))
             total = sum(x[(e.id, d, p.id)] for d in days for p in pats)
+            loads.append(total)
             over = model.NewIntVar(0, len(days), f"over_e{e.id}")
-            under = model.NewIntVar(0, len(days), f"under_e{e.id}")
+            # under の上限は目標値。len(days) 固定だと目標>日数のときに式が成立せず、
+            # 意図しない最低勤務数が強制される不具合になる。
+            under = model.NewIntVar(0, monthly_target, f"under_e{e.id}")
             model.Add(total - monthly_target == over - under)
             penalties.append(over)
             penalties.append(under)
@@ -229,15 +240,27 @@ class ShiftScheduler:
 
         # Objective: minimize deviation from weekly target, reward preferences and main_shift matches.
         # main_shift の重みは preference より強く (weight=5) して、可能な限り希望シフトに近づける。
+        # Fairness (S-6): 勤務時間を平準化する。供給 < 需要のとき目標偏差だけでは
+        # 分配が縮退して一部の従業員が 0 枠になるため、最大負荷と最小負荷の差を縮める。
+        balance = 0
+        if loads:
+            max_load = model.NewIntVar(0, len(days), "max_load")
+            min_load = model.NewIntVar(0, len(days), "min_load")
+            for load_e in loads:
+                model.Add(load_e <= max_load)
+                model.Add(load_e >= min_load)
+            balance = max_load - min_load
+
         obj = 0
         if penalties:
             obj += sum(penalties)
         if bonus_terms:
-            obj -= 3 * sum(bonus_terms)
+            obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
         if main_shift_bonus_terms:
-            obj -= 5 * sum(main_shift_bonus_terms)
-        if penalties or bonus_terms or main_shift_bonus_terms:
-            model.Minimize(obj)
+            obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
+        if loads:
+            obj += BALANCE_WEIGHT * balance
+        model.Minimize(obj)
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.max_solve_seconds

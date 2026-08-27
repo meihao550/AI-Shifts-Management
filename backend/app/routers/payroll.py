@@ -31,6 +31,7 @@ def get_payroll(
     if not shift:
         raise HTTPException(status_code=404, detail="shift for this month not found")
 
-    employees = list(db.execute(select(Employee)).scalars())
+    # 在籍中の従業員を集計対象にする（0 出勤でも一覧に表示する）
+    employees = list(db.execute(select(Employee).where(Employee.active.is_(True))).scalars())
     employees_by_id = {e.id: e for e in employees}
     return calculate_payroll(year, month, shift.assignments, employees_by_id)

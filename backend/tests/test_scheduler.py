@@ -94,3 +94,26 @@ def test_forbidden_pair_are_separated_when_possible():
         slot_members.setdefault(slot, set()).add(a["employee_id"])
     for members in slot_members.values():
         assert not ({1, 2} <= members)
+
+
+def test_load_is_balanced_across_employees():
+    """供給が少なくても勤務は公平に分配され、一部の従業員が 0 枠にならない。"""
+    employees = [_employee(i, f"E{i}") for i in range(1, 6)]  # 5 人
+    scheduler = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=employees,
+        patterns=[MORNING],
+        staffing_rules={("weekday", "morning"): 1, ("weekend_or_holiday", "morning"): 1},
+        availabilities=[],
+        max_solve_seconds=10.0,
+    )
+    result = scheduler.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    counts = {e.id: 0 for e in employees}
+    for a in result.assignments:
+        counts[a["employee_id"]] += 1
+    values = list(counts.values())
+    assert min(values) >= 1  # 誰も 0 枠にならない
+    assert max(values) - min(values) <= 2  # 偏りが小さい
