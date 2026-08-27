@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NAlert,
@@ -19,7 +19,7 @@ import {
 import { useShiftStore } from '@/stores/shift'
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
-import type { AvailabilityKind } from '@/types'
+import type { AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 
 const shiftStore = useShiftStore()
@@ -45,12 +45,27 @@ const availabilityForm = ref<{
 
 const loading = ref(false)
 
+// 手動編集用のドラフト（保存されるまではこちらを表示・編集する）
+const draft = ref<ShiftAssignment[]>([])
+const dirty = ref(false)
+
+// store のシフトが変わったらドラフトを作り直す
+watch(
+  () => shiftStore.shift,
+  (s) => {
+    draft.value = s ? s.assignments.map((a) => ({ ...a })) : []
+    dirty.value = false
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
   loading.value = true
   try {
     await Promise.all([
       employeeStore.fetchAll(),
       ruleStore.fetchPatterns(),
+      ruleStore.fetchStaffing(),
       shiftStore.fetch(year.value, month.value),
     ])
   } finally {
@@ -60,8 +75,8 @@ onMounted(async () => {
 
 const days = computed(() => {
   const list: Date[] = []
-  const days = new Date(year.value, month.value, 0).getDate()
-  for (let i = 1; i <= days; i++) list.push(new Date(year.value, month.value - 1, i))
+  const total = new Date(year.value, month.value, 0).getDate()
+  for (let i = 1; i <= total; i++) list.push(new Date(year.value, month.value - 1, i))
   return list
 })
 
@@ -84,6 +99,13 @@ function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
 
+// パターンコード → シフト区分(morning/evening/night) の対応
+const codeToCategory = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {}
+  for (const p of ruleStore.patterns) m[p.code] = p.category
+  return m
+})
+
 function isoLocalDate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -102,7 +124,7 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   const emp = employeeStore.employees.find((e) => e.id === employeeId)
   const mainType = emp?.main_shift_type ?? null
 
-  const matches = shift.value.assignments.filter(
+  const matches = draft.value.filter(
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
   if (matches.length === 0) return { label: '', mainMismatch: false }
@@ -119,6 +141,108 @@ function cellStyle(date: Date) {
   if (w === 0) return { color: '#c92a2a' }
   if (w === 6) return { color: '#1971c2' }
   return {}
+}
+
+// ---- 人数不足リマインド ----------------------------------------------------
+const CATEGORIES = ['morning', 'evening', 'night'] as const
+
+function requiredFor(dayCategory: string, category: string): number {
+  const r = ruleStore.staffing.find(
+    (s) => s.day_category === dayCategory && s.shift_category === category,
+  )
+  return r?.required ?? 0
+}
+
+interface Shortfall {
+  day: number
+  category: string
+  have: number
+  need: number
+}
+
+// 各日・各区分の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
+const shortfalls = computed<Shortfall[]>(() => {
+  const out: Shortfall[] = []
+  if (!shift.value) return out
+  for (const d of days.value) {
+    const iso = isoLocalDate(d)
+    const dayCategory = d.getDay() === 0 || d.getDay() === 6 ? 'weekend_or_holiday' : 'weekday'
+    for (const category of CATEGORIES) {
+      const need = requiredFor(dayCategory, category)
+      if (need <= 0) continue
+      const have = draft.value.filter(
+        (a) => a.target_date === iso && codeToCategory.value[a.shift_type] === category,
+      ).length
+      if (have < need) out.push({ day: d.getDate(), category, have, need })
+    }
+  }
+  return out
+})
+
+// ---- セル編集 --------------------------------------------------------------
+const editCell = ref<{ employee_id: number; date: string; empName: string } | null>(null)
+const editShiftType = ref<string | null>(null)
+
+function openCellEdit(employeeId: number, date: Date) {
+  if (!shift.value) return
+  const iso = isoLocalDate(date)
+  const existing = draft.value.find((a) => a.employee_id === employeeId && a.target_date === iso)
+  editShiftType.value = existing?.shift_type ?? null
+  editCell.value = {
+    employee_id: employeeId,
+    date: iso,
+    empName: employeeStore.employees.find((e) => e.id === employeeId)?.name ?? '',
+  }
+}
+
+function saveCellEdit() {
+  if (!editCell.value) return
+  const { employee_id, date } = editCell.value
+  // その従業員・その日の既存割当を一旦削除
+  draft.value = draft.value.filter(
+    (a) => !(a.employee_id === employee_id && a.target_date === date),
+  )
+  const code = editShiftType.value
+  if (code) {
+    const p = ruleStore.patterns.find((pp) => pp.code === code)
+    if (p) {
+      draft.value.push({
+        id: 0,
+        shift_id: shift.value?.id ?? 0,
+        employee_id,
+        target_date: date,
+        shift_type: p.code,
+        start_time: p.start_time,
+        end_time: p.end_time,
+        crosses_midnight: p.end_time <= p.start_time,
+      })
+    }
+  }
+  dirty.value = true
+  editCell.value = null
+}
+
+async function saveShift() {
+  if (!shift.value) return
+  try {
+    const payload = draft.value.map((a) => ({
+      employee_id: a.employee_id,
+      target_date: a.target_date,
+      shift_type: a.shift_type,
+      start_time: a.start_time,
+      end_time: a.end_time,
+      crosses_midnight: a.crosses_midnight,
+    }))
+    await shiftStore.saveAssignments(shift.value.id, payload)
+    dirty.value = false
+    if (shortfalls.value.length) {
+      message.warning(`更新しました（人数不足が ${shortfalls.value.length} 件あります）`)
+    } else {
+      message.success('シフトを更新しました')
+    }
+  } catch (e) {
+    message.error(`更新失敗: ${(e as Error).message}`)
+  }
 }
 
 async function loadShift() {
@@ -192,14 +316,7 @@ function goPrint() {
         <NButton type="primary" ghost @click="openAvailability">
           希望・不可能日を追加
         </NButton>
-        <NButton
-          v-if="shift"
-          type="success"
-          ghost
-          @click="goPrint"
-        >
-          印刷プレビュー
-        </NButton>
+        <NButton v-if="shift" type="success" ghost @click="goPrint"> 印刷プレビュー </NButton>
       </NSpace>
     </NCard>
 
@@ -227,60 +344,84 @@ function goPrint() {
       </NSpace>
     </NCard>
 
-    <NCard title="シフト表">
+    <NCard title="シフト表（セルをクリックで編集）">
       <template #header-extra>
-        <NTag v-if="shift" :type="shift.status === 'finalized' ? 'success' : 'default'">
-          {{
-            shift.status === 'finalized'
-              ? '確定済み'
-              : shift.status === 'published'
-                ? '公開中'
-                : 'ドラフト'
-          }}
-        </NTag>
+        <NSpace align="center">
+          <NTag v-if="shift" :type="shift.status === 'finalized' ? 'success' : 'default'">
+            {{
+              shift.status === 'finalized'
+                ? '確定済み'
+                : shift.status === 'published'
+                  ? '公開中'
+                  : 'ドラフト'
+            }}
+          </NTag>
+          <NTag v-if="dirty" type="warning" size="small">未保存の変更あり</NTag>
+          <NButton v-if="shift" type="primary" size="small" :disabled="!dirty" @click="saveShift">
+            更新
+          </NButton>
+        </NSpace>
       </template>
       <NSpin :show="loading || shiftStore.generating">
         <NAlert v-if="!shift" type="info">
           このシフトはまだ作成されていません。上の「シフトを生成」から作成できます。
         </NAlert>
-        <div v-else class="table-scroll">
-          <table class="shift-grid">
-            <thead>
-              <tr>
-                <th class="fixed">従業員</th>
-                <th v-for="d in days" :key="d.getTime()" :style="cellStyle(d)">
-                  {{ d.getDate() }}
-                  <br />
-                  <small>{{ '日月火水木金土'[d.getDay()] }}</small>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="emp in employeeStore.employees" :key="emp.id">
-                <td class="fixed">{{ emp.name }}</td>
-                <template v-for="d in days" :key="d.getTime()">
-                  <td
-                    class="cell"
-                    :class="{ 'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch }"
-                    :title="
-                      assignmentsFor(emp.id, d).mainMismatch
-                        ? `${emp.name} のメインシフト (${
-                            shiftTypeLabel(emp.main_shift_type ?? '')
-                          }) 以外で入っています`
-                        : ''
-                    "
-                  >
-                    {{ assignmentsFor(emp.id, d).label }}
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-          </table>
-          <p class="legend">
-            <span class="legend-swatch legend-swatch--mismatch"></span>
-            赤: メインシフト以外で入っている割当
-          </p>
-        </div>
+        <template v-else>
+          <NAlert
+            v-if="shortfalls.length"
+            type="warning"
+            title="人数が規定に足りていません"
+            style="margin-bottom: 12px"
+          >
+            <div class="shortfall-list">
+              <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
+                {{ s.day }}日 {{ shiftTypeLabel(s.category) }} {{ s.have }}/{{ s.need }}人
+              </span>
+            </div>
+            <p class="shortfall-note">
+              ※土日は休日扱いで判定しています（祝日は未考慮）。編集後は「更新」で保存してください。
+            </p>
+          </NAlert>
+          <div class="table-scroll">
+            <table class="shift-grid">
+              <thead>
+                <tr>
+                  <th class="fixed">従業員</th>
+                  <th v-for="d in days" :key="d.getTime()" :style="cellStyle(d)">
+                    {{ d.getDate() }}
+                    <br />
+                    <small>{{ '日月火水木金土'[d.getDay()] }}</small>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="emp in employeeStore.employees" :key="emp.id">
+                  <td class="fixed">{{ emp.name }}</td>
+                  <template v-for="d in days" :key="d.getTime()">
+                    <td
+                      class="cell cell-editable"
+                      :class="{ 'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch }"
+                      :title="
+                        assignmentsFor(emp.id, d).mainMismatch
+                          ? `${emp.name} のメインシフト (${
+                              shiftTypeLabel(emp.main_shift_type ?? '')
+                            }) 以外で入っています`
+                          : 'クリックで編集'
+                      "
+                      @click="openCellEdit(emp.id, d)"
+                    >
+                      {{ assignmentsFor(emp.id, d).label }}
+                    </td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
+            <p class="legend">
+              <span class="legend-swatch legend-swatch--mismatch"></span>
+              赤: メインシフト以外で入っている割当
+            </p>
+          </div>
+        </template>
       </NSpin>
     </NCard>
 
@@ -310,11 +451,30 @@ function goPrint() {
           clearable
           :options="patternOptions"
         />
-        <NInput
-          v-model:value="availabilityForm.note"
-          placeholder="メモ (任意)"
-        />
+        <NInput v-model:value="availabilityForm.note" placeholder="メモ (任意)" />
         <NButton type="primary" block @click="submitAvailability">登録</NButton>
+      </NSpace>
+    </NModal>
+
+    <NModal
+      :show="!!editCell"
+      preset="card"
+      title="シフト編集"
+      style="width: 360px"
+      @update:show="(v: boolean) => { if (!v) editCell = null }"
+    >
+      <NSpace v-if="editCell" vertical>
+        <p style="margin: 0">{{ editCell.empName }} / {{ editCell.date }}</p>
+        <NSelect
+          v-model:value="editShiftType"
+          :options="patternOptions"
+          clearable
+          placeholder="シフトなし（休み）"
+        />
+        <NSpace justify="end">
+          <NButton @click="editCell = null">キャンセル</NButton>
+          <NButton type="primary" @click="saveCellEdit">反映</NButton>
+        </NSpace>
       </NSpace>
     </NModal>
   </NSpace>
@@ -356,10 +516,32 @@ function goPrint() {
   background: #eaeef7;
   z-index: 2;
 }
+.shift-grid td.cell-editable {
+  cursor: pointer;
+}
+.shift-grid td.cell-editable:hover {
+  background: #eef4ff;
+}
 .shift-grid td.cell-main-mismatch {
   background: #ffe3e3;
   color: #c92a2a;
   font-weight: 700;
+}
+.shortfall-list {
+  max-height: 120px;
+  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+.shortfall-item {
+  white-space: nowrap;
+}
+.shortfall-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #8892a6;
 }
 .legend {
   margin: 12px 0 0;
