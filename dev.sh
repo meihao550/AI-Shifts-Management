@@ -15,7 +15,7 @@ trap 'kill 0' EXIT
 
 # マイグレーションの実行
 echo "===> migrate -> alembic upgrade head"
-( cd backend && uv run alembic upgrade head) || {echo "!! migration failed"; exit 1; }
+( cd backend && uv run alembic upgrade head ) || { echo "!! migration failed"; exit 1; }
 
 echo "==> backend  → http://localhost:8000"
 ( cd backend && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ) &
