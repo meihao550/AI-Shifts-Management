@@ -99,8 +99,13 @@ def default_patterns() -> list[dict]:
     return patterns
 
 
-# 1時間ごとの必要人数のデフォルト（拡張時 1..24）。
-# 深夜(1-8) は 1 人、営業ピークの朝(9-16)・夜(17-24) は平日2/金土日祝3 人（要件6.3）。
+# 1時間ごとの必要人数のデフォルト（拡張時 1..24）。要件6.3/6.4。
+#
+# 平日は基本パターン(9-17/17-1/1-9)だけで一律に充足する。
+# 金・土・日・祝の「+1名」は繁忙ピーク帯だけに置き、そのピークは基本パターンでは
+# 過剰(==違反)になって埋められない形にする。すると solver は Wワーク専用パターン
+# （10-17 や 18-1 など。掛け持ち従業員のみ配置可）を使わざるを得なくなり、
+# 過剰配置なし(==維持)のまま Wワークの人が繁忙帯に入る（方針B: ピーク運用）。
 def default_hourly_rules() -> list[dict]:
     rules: list[dict] = []
 
@@ -110,13 +115,16 @@ def default_hourly_rules() -> list[dict]:
                 {"day_category": day_category, "hour": h, "required": required}
             )
 
-    # 平日（月〜木）
+    # 平日（月〜木）: 深夜1 / 朝2 / 夜2（すべて基本パターンで充足）
     add(DayCategory.weekday, range(1, 9), 1)  # 深夜 1:00-9:00
     add(DayCategory.weekday, range(9, 17), 2)  # 朝 9:00-17:00
     add(DayCategory.weekday, range(17, 25), 2)  # 夜 17:00-翌1:00
-    # 金・土・日・祝（繁忙区分）
-    add(DayCategory.weekend_or_holiday, range(1, 9), 1)
-    add(DayCategory.weekend_or_holiday, range(9, 17), 3)
-    add(DayCategory.weekend_or_holiday, range(17, 25), 3)
+
+    # 金・土・日・祝（繁忙区分）: 深夜1 / 朝は10-16がピークで+1 / 夜は18-24がピークで+1
+    add(DayCategory.weekend_or_holiday, range(1, 9), 1)  # 深夜 1:00-9:00
+    add(DayCategory.weekend_or_holiday, range(9, 10), 2)  # 9時台は2（基本2枚）
+    add(DayCategory.weekend_or_holiday, range(10, 17), 3)  # 10-16時が朝ピーク +1 → 10-17(W)
+    add(DayCategory.weekend_or_holiday, range(17, 18), 2)  # 17時台は2（基本2枚）
+    add(DayCategory.weekend_or_holiday, range(18, 25), 3)  # 18-24時が夜ピーク +1 → 18-1(W)
 
     return rules

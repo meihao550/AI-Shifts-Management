@@ -34,6 +34,9 @@ from app.services.holidays import category_for
 BALANCE_WEIGHT = 50
 PREFERENCE_WEIGHT = 1
 MAIN_SHIFT_WEIGHT = 1
+# Wワーク従業員は Wワーク専用パターン(不定時刻)を優先して割り当てる（ソフト）。
+# 基本パターンで全時間が埋まると W 枠が使われないため、明示的に寄せる。
+DUAL_WWORK_WEIGHT = 8
 # 新規採用者の想定 週勤務回数（人手不足時の推奨採用人数の計算に使用）
 DEFAULT_NEW_HIRE_WEEKLY = 5
 # 時間カバレッジ違反（不足/過剰）のペナルティ重み。他のどの目的より十分大きくして、
@@ -333,14 +336,26 @@ class ShiftScheduler:
         # Soft main_shift_type bonus:
         # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
         # 一致した割当 1 個ごとに +1 のボーナス。
+        # Wワーク従業員は不定時刻が前提なのでメインシフト寄せの対象外にする
+        # （代わりに下の Wワーク寄せを効かせる）。
         main_shift_bonus_terms: list[cp_model.IntVar] = []
         for e in emps:
-            if not e.main_shift_type:
+            if not e.main_shift_type or e.is_dual_worker:
                 continue
             for d in days:
                 for p in pats:
                     if p.code == e.main_shift_type or p.category == e.main_shift_type:
                         main_shift_bonus_terms.append(x[(e.id, d, p.id)])
+
+        # Soft: Wワーク従業員は Wワーク専用パターン(is_basic=False)を優先する。
+        dual_wwork_bonus_terms: list[cp_model.IntVar] = []
+        for e in emps:
+            if not e.is_dual_worker:
+                continue
+            for d in days:
+                for p in pats:
+                    if not p.is_basic:
+                        dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
 
         # Objective: minimize deviation from monthly target, reward preferences and main_shift matches.
         # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
@@ -361,6 +376,8 @@ class ShiftScheduler:
             obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
         if main_shift_bonus_terms:
             obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
+        if dual_wwork_bonus_terms:
+            obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
         if loads:
             obj += BALANCE_WEIGHT * balance
         if slack_terms:

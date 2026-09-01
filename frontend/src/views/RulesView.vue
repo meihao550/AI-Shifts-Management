@@ -100,8 +100,11 @@ function hourLabel(hour: number): string {
 
 function defaultRequired(hour: number, isWeekend: boolean): number {
   if (hour >= 1 && hour <= 8) return 1 // 深夜 1:00-9:00
-  if (hour >= 9 && hour <= 16) return isWeekend ? 3 : 2 // 朝 9:00-17:00
-  if (hour >= 17 && hour <= 24) return isWeekend ? 3 : 2 // 夜 17:00-翌1:00
+  if (!isWeekend) return hour >= 9 && hour <= 24 ? 2 : 0 // 平日: 朝夜とも2
+  // 金・土・日・祝: ピーク帯(10-16 / 18-24)だけ +1。ここが Wワーク枠になる。
+  if (hour === 9 || hour === 17) return 2
+  if (hour >= 10 && hour <= 16) return 3 // 朝ピーク
+  if (hour >= 18 && hour <= 24) return 3 // 夜ピーク
   return 0
 }
 

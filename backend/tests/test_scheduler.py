@@ -234,6 +234,45 @@ def test_dual_worker_pattern_only_for_dual_workers():
             assert a["employee_id"] == 2
 
 
+def test_peaked_requirement_forces_wwork_pattern_for_dual_worker():
+    """ピーク帯を基本パターンでは過剰になる形にすると、Wワーク専用パターンが
+    使われ、それは Wワーク従業員にのみ割り当てられる（方針B: ピーク運用）。"""
+    w_1017 = PatternSpec(
+        id=3,
+        code="w_1017",
+        label="Wワーク 10:00-17:00",
+        start=time(10, 0),
+        end=time(17, 0),
+        category="morning",
+        is_basic=False,  # ← Wワーク専用（通常従業員は不可）
+    )
+    normal = EmployeeSpec(
+        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
+    )
+    dual = EmployeeSpec(
+        id=2,
+        name="Wワーク",
+        weekly_target=7,
+        main_shift_type=None,
+        hourly_wage=1000,
+        is_dual_worker=True,
+    )
+    # 9時=1（基本 MORNING が1枚）/ 10-16時=2（ピーク +1）。
+    # ピークの+1は 9時を過剰にせず埋める必要があり、10-17(W) でしか埋まらない。
+    result = _make_scheduler(
+        patterns=[MORNING, w_1017],
+        staffing_rules=_hourly((range(9, 10), 1), (range(10, 17), 2)),
+        employees=[normal, dual],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert not any("不足" in w for w in result.warnings)
+
+    # Wワーク専用パターンが実際に使われ、かつ Wワーク従業員(id=2)のみが入る
+    w_assigns = [a for a in result.assignments if a["shift_type"] == "w_1017"]
+    assert w_assigns, "ピークを埋めるために Wワークパターンが使われるはず"
+    assert all(a["employee_id"] == 2 for a in w_assigns)
+
+
 def test_staffing_shortage_recommends_hiring():
     """必要人数に対し従業員が足りないとき、採用を促す警告が出る。"""
     result = _make_scheduler(
