@@ -43,6 +43,11 @@ const rowColumns: DataTableColumns<PayrollRow> = [
     render: (r) => `¥${r.transport_cost_total.toLocaleString()}`,
   },
   {
+    title: '有給',
+    key: 'paid_leave_total',
+    render: (r) => `¥${r.paid_leave_total.toLocaleString()}（${r.paid_leave_days}日）`,
+  },
+  {
     title: '保険',
     key: 'insurance_status',
     render: (r) =>

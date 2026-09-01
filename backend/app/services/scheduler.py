@@ -119,7 +119,8 @@ class ShiftScheduler:
     def _unavailable_lookup(self) -> set[tuple[int, date]]:
         s: set[tuple[int, date]] = set()
         for a in self.availabilities:
-            if a.kind == "unavailable":
+            # 勤務不可日・有給日はその日に配置しない（有給は勤務ではないため）
+            if a.kind in ("unavailable", "paid_leave"):
                 s.add((a.employee_id, a.target_date))
         for h in self.llm.hard_unavailable:
             try:

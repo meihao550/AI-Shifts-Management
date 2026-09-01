@@ -1,17 +1,18 @@
 """Payroll (labor cost) calculation.
 
-Assumptions (per Project.pdf):
+Assumptions (per Project.pdf / 要件9.1):
   - 割増賃金は「深夜帯 22:00–翌 5:00」を 25% 増しで計算し、人件費に含める
-  - 交通費は 1 出勤あたり `employee.transport_cost` 円で計上（有給は未対応。TODO）
+  - 交通費は 1 出勤あたり `employee.transport_cost` 円で計上
+  - 有給は「有給日数 × 有給1日あたりの金額(employee.paid_leave_amount)」を人件費に加算する。
+    勤務時間には加算しない（保険判定にも影響しない）＝要件F-3
   - 保険判定は月間労働時間で行う:
         social:      120h 以上
         employment:   80–119h
         none:         79h 以下
 
 TODO (先方確認事項):
-  - 有給の計上ルール
   - 交通費の月上限（現状: 出勤日数 × 単価）
-  - 社会保険料の会社負担分を人件費に含めるか
+  - 社会保険料の会社負担分を人件費に含めるか（→ 要件21章 段階的算入）
 """
 
 from __future__ import annotations
@@ -79,10 +80,16 @@ def calculate_payroll(
     month: int,
     assignments: Iterable[ShiftAssignment],
     employees_by_id: dict[int, Employee],
+    paid_leave_records: Iterable[tuple[int, date]] | None = None,
 ) -> PayrollReport:
     by_emp: dict[int, list[ShiftAssignment]] = defaultdict(list)
     for a in assignments:
         by_emp[a.employee_id].append(a)
+
+    # 有給日を従業員ごと・日付ごとに集計する（勤務時間には加算せず人件費にのみ計上）。
+    paid_leave_dates_by_emp: dict[int, list[date]] = defaultdict(list)
+    for emp_id, d in paid_leave_records or []:
+        paid_leave_dates_by_emp[emp_id].append(d)
 
     rows: list[PayrollRow] = []
     per_day_totals: dict[date, dict[str, int]] = defaultdict(lambda: {"total_cost": 0, "headcount": 0})
@@ -112,7 +119,14 @@ def calculate_payroll(
         transport_cost_total = emp.transport_cost * len(emp_assignments)
         insurance = _classify_insurance(total_hours)
 
-        grand = base_wage + overnight_premium + transport_cost_total
+        # 有給: 日数 × 有給1日あたりの金額（勤務時間・保険判定には影響しない）
+        paid_leave_dates = paid_leave_dates_by_emp.get(emp_id, [])
+        paid_leave_days = len(paid_leave_dates)
+        paid_leave_total = paid_leave_days * emp.paid_leave_amount
+        for d in paid_leave_dates:
+            per_day_totals[d]["total_cost"] += emp.paid_leave_amount
+
+        grand = base_wage + overnight_premium + transport_cost_total + paid_leave_total
         rows.append(
             PayrollRow(
                 employee_id=emp.id,
@@ -122,6 +136,8 @@ def calculate_payroll(
                 base_wage=base_wage,
                 overnight_premium=overnight_premium,
                 transport_cost_total=transport_cost_total,
+                paid_leave_days=paid_leave_days,
+                paid_leave_total=paid_leave_total,
                 insurance_status=insurance,
                 grand_total=grand,
             )

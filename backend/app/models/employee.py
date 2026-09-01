@@ -84,6 +84,7 @@ class Employee(Base):
 class AvailabilityKind(StrEnum):
     unavailable = "unavailable"  # 絶対勤務不可
     preferred = "preferred"  # 入りたい
+    paid_leave = "paid_leave"  # 有給休暇（勤務不可扱い＋人件費に日額を加算）
 
 
 class EmployeeAvailability(Base):

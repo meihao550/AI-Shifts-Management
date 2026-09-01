@@ -76,9 +76,7 @@ async function add(kind: AvailabilityKind, d: Date) {
       note: null,
     })
     availabilities.value.push(created)
-    message.success(
-      `${isoDate(d)} を ${kind === 'unavailable' ? '休日' : '希望日'} に追加しました`,
-    )
+    message.success(`${isoDate(d)} を ${kindLabels[kind]} に追加しました`)
   } catch (e) {
     message.error(`登録失敗: ${(e as Error).message}`)
   }
@@ -95,9 +93,16 @@ async function remove(id: number) {
 
 function dayClass(d: Date) {
   const items = itemsOn(d)
+  if (items.some((i) => i.kind === 'paid_leave')) return 'day day--paid-leave'
   if (items.some((i) => i.kind === 'unavailable')) return 'day day--unavailable'
   if (items.some((i) => i.kind === 'preferred')) return 'day day--preferred'
   return 'day'
+}
+
+const kindLabels: Record<AvailabilityKind, string> = {
+  unavailable: '休日',
+  preferred: '希望日',
+  paid_leave: '有給',
 }
 
 function dayColor(d: Date) {
@@ -120,7 +125,8 @@ function dayColor(d: Date) {
       />
       <NTag :bordered="false" round type="error">■ 休日 (勤務不可)</NTag>
       <NTag :bordered="false" round type="success">■ 希望日</NTag>
-      <span class="hint">日付をクリックして休日/希望日を登録</span>
+      <NTag :bordered="false" round type="warning">■ 有給</NTag>
+      <span class="hint">日付をクリックして休日/希望日/有給を登録</span>
     </NSpace>
 
     <NSpin :show="loading">
@@ -151,6 +157,10 @@ function dayColor(d: Date) {
                   v-if="itemsOn(d).some((i) => i.kind === 'preferred')"
                   class="mark mark--preferred"
                 >希</span>
+                <span
+                  v-if="itemsOn(d).some((i) => i.kind === 'paid_leave')"
+                  class="mark mark--paid-leave"
+                >有</span>
               </div>
             </div>
           </template>
@@ -160,8 +170,17 @@ function dayColor(d: Date) {
             </p>
             <NSpace vertical size="small">
               <div v-for="a in itemsOn(d)" :key="a.id" class="item-row">
-                <NTag :type="a.kind === 'unavailable' ? 'error' : 'success'" size="small">
-                  {{ a.kind === 'unavailable' ? '休日' : '希望日' }}
+                <NTag
+                  :type="
+                    a.kind === 'unavailable'
+                      ? 'error'
+                      : a.kind === 'paid_leave'
+                        ? 'warning'
+                        : 'success'
+                  "
+                  size="small"
+                >
+                  {{ kindLabels[a.kind] }}
                 </NTag>
                 <NButton size="tiny" quaternary type="error" @click="remove(a.id)">削除</NButton>
               </div>
@@ -171,6 +190,9 @@ function dayColor(d: Date) {
                 </NButton>
                 <NButton size="small" type="success" ghost @click="add('preferred', d)">
                   希望日として登録
+                </NButton>
+                <NButton size="small" type="warning" ghost @click="add('paid_leave', d)">
+                  有給として登録
                 </NButton>
               </NSpace>
             </NSpace>
@@ -221,6 +243,10 @@ function dayColor(d: Date) {
   background: #e8f7ec;
   border-color: #bde0c6;
 }
+.day--paid-leave {
+  background: #fff4e0;
+  border-color: #f0d199;
+}
 .num {
   font-weight: 600;
   font-size: 13px;
@@ -241,6 +267,9 @@ function dayColor(d: Date) {
 }
 .mark--preferred {
   background: #2f9e44;
+}
+.mark--paid-leave {
+  background: #e8933a;
 }
 .hint {
   color: #8892a6;

@@ -27,7 +27,7 @@ export interface Employee {
   active: boolean
 }
 
-export type AvailabilityKind = 'unavailable' | 'preferred'
+export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
 
 export interface Availability {
   id: number
@@ -89,6 +89,8 @@ export interface PayrollRow {
   base_wage: number
   overnight_premium: number
   transport_cost_total: number
+  paid_leave_days: number
+  paid_leave_total: number
   insurance_status: 'social' | 'employment' | 'none'
   grand_total: number
 }
