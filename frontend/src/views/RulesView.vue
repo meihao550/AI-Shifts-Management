@@ -16,14 +16,10 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useRuleStore } from '@/stores/rule'
-import type { ShiftPattern, StaffingRule } from '@/types'
+import type { DayCategory, HourlyStaffingRule, ShiftPattern } from '@/types'
 
 const store = useRuleStore()
 const message = useMessage()
-
-onMounted(async () => {
-  await Promise.all([store.fetchPatterns(), store.fetchStaffing()])
-})
 
 const showPattern = ref(false)
 const patternForm = ref<{
@@ -49,7 +45,7 @@ const patternColumns: DataTableColumns<ShiftPattern> = [
   { title: '開始', key: 'start_time' },
   { title: '終了', key: 'end_time' },
   { title: '区分', key: 'category' },
-  { title: '基本', key: 'is_basic', render: (r) => (r.is_basic ? '○' : '') },
+  { title: '基本', key: 'is_basic', render: (r) => (r.is_basic ? '○' : 'Wワーク') },
   {
     title: '操作',
     key: 'ops',
@@ -92,37 +88,64 @@ async function deletePattern(id: number) {
   }
 }
 
-const staffingRows = ref<StaffingRule[]>([])
+// --- 時間別必要人数 (時間カバレッジ方式) ---
+// 営業日は 1:00 起点。拡張時 1〜24（24 = 翌0:00-1:00）を行にする。
+const HOURS = Array.from({ length: 24 }, (_, i) => i + 1) // 1..24
 
-async function loadStaffing() {
-  await store.fetchStaffing()
-  staffingRows.value =
-    store.staffing.length > 0
-      ? store.staffing.map((r) => ({ ...r }))
-      : defaultStaffing()
+// hour -> 必要人数。曜日区分ごとに保持。
+const weekday = ref<Record<number, number>>({})
+const weekend = ref<Record<number, number>>({})
+
+function hourLabel(hour: number): string {
+  // 24:00-25:00 のような拡張時表記（要件書§12.2）
+  return `${hour}:00–${hour + 1}:00`
 }
 
-function defaultStaffing(): StaffingRule[] {
-  return [
-    { day_category: 'weekday', shift_category: 'morning', required: 2 },
-    { day_category: 'weekday', shift_category: 'evening', required: 2 },
-    { day_category: 'weekday', shift_category: 'night', required: 1 },
-    { day_category: 'weekend_or_holiday', shift_category: 'morning', required: 3 },
-    { day_category: 'weekend_or_holiday', shift_category: 'evening', required: 3 },
-    { day_category: 'weekend_or_holiday', shift_category: 'night', required: 1 },
-  ]
+function defaultRequired(hour: number, isWeekend: boolean): number {
+  if (hour >= 1 && hour <= 8) return 1 // 深夜 1:00-9:00
+  if (hour >= 9 && hour <= 16) return isWeekend ? 3 : 2 // 朝 9:00-17:00
+  if (hour >= 17 && hour <= 24) return isWeekend ? 3 : 2 // 夜 17:00-翌1:00
+  return 0
 }
 
-async function saveStaffing() {
+async function loadHourlyStaffing() {
+  await store.fetchHourlyStaffing()
+  const wd: Record<number, number> = {}
+  const we: Record<number, number> = {}
+  for (const hour of HOURS) {
+    wd[hour] = defaultRequired(hour, false)
+    we[hour] = defaultRequired(hour, true)
+  }
+  // サーバに保存済みがあれば上書き
+  for (const r of store.hourlyStaffing) {
+    if (r.day_category === 'weekday') wd[r.hour] = r.required
+    else we[r.hour] = r.required
+  }
+  weekday.value = wd
+  weekend.value = we
+}
+
+async function saveHourlyStaffing() {
+  const rows: HourlyStaffingRule[] = []
+  for (const hour of HOURS) {
+    rows.push({ day_category: 'weekday' as DayCategory, hour, required: weekday.value[hour] ?? 0 })
+    rows.push({
+      day_category: 'weekend_or_holiday' as DayCategory,
+      hour,
+      required: weekend.value[hour] ?? 0,
+    })
+  }
   try {
-    await store.saveStaffing(staffingRows.value)
+    await store.saveHourlyStaffing(rows)
     message.success('保存しました')
   } catch (e) {
     message.error(`保存失敗: ${(e as Error).message}`)
   }
 }
 
-onMounted(loadStaffing)
+onMounted(async () => {
+  await Promise.all([store.fetchPatterns(), loadHourlyStaffing()])
+})
 </script>
 
 <template>
@@ -131,35 +154,37 @@ onMounted(loadStaffing)
       <template #header-extra>
         <NButton type="primary" @click="showPattern = true">＋ パターン追加</NButton>
       </template>
+      <p style="margin-top: 0; color: #6b7080">
+        基本パターン(朝/夜/深夜)に加え、Wワーク向けの不定時刻パターンもここから追加できます
+        (「基本パターン」を OFF にすると Wワーク扱い)。
+      </p>
       <NDataTable :columns="patternColumns" :data="store.patterns" />
     </NCard>
 
-    <NCard title="必要人員 (曜日区分 × シフト区分)">
+    <NCard title="必要人員 (1時間ごと × 曜日区分)">
       <template #header-extra>
-        <NButton type="primary" @click="saveStaffing">保存</NButton>
+        <NButton type="primary" @click="saveHourlyStaffing">保存</NButton>
       </template>
+      <p style="margin-top: 0; color: #6b7080">
+        営業日は 1:00 起点で扱います。深夜跨ぎは拡張時表記(24:00 = 翌0:00)。各時間ちょうどの
+        人数になるよう配置します。
+      </p>
       <table class="staffing">
         <thead>
           <tr>
-            <th>日区分</th>
-            <th>シフト区分</th>
-            <th>必要人数</th>
+            <th>時間帯</th>
+            <th>平日</th>
+            <th>土日祝</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, i) in staffingRows" :key="i">
-            <td>{{ row.day_category === 'weekday' ? '平日' : '土日祝' }}</td>
+          <tr v-for="hour in HOURS" :key="hour">
+            <td>{{ hourLabel(hour) }}</td>
             <td>
-              {{
-                row.shift_category === 'morning'
-                  ? '朝'
-                  : row.shift_category === 'evening'
-                    ? '夜'
-                    : '深夜'
-              }}
+              <NInputNumber v-model:value="weekday[hour]" :min="0" style="width: 100px" />
             </td>
             <td>
-              <NInputNumber v-model:value="row.required" :min="0" style="width: 100px" />
+              <NInputNumber v-model:value="weekend[hour]" :min="0" style="width: 100px" />
             </td>
           </tr>
         </tbody>
@@ -173,8 +198,8 @@ onMounted(loadStaffing)
       style="width: 480px"
     >
       <NSpace vertical>
-        <NInput v-model:value="patternForm.code" placeholder="コード (例: morning)" />
-        <NInput v-model:value="patternForm.label" placeholder="表示名 (例: 朝 09:00-17:00)" />
+        <NInput v-model:value="patternForm.code" placeholder="コード (例: w_20_01)" />
+        <NInput v-model:value="patternForm.label" placeholder="表示名 (例: Wワーク 20:00-01:00)" />
         <NTimePicker v-model:value="patternForm.start_time" format="HH:mm" placeholder="開始時刻" />
         <NTimePicker v-model:value="patternForm.end_time" format="HH:mm" placeholder="終了時刻" />
         <NSelect
@@ -188,6 +213,7 @@ onMounted(loadStaffing)
         <NSpace align="center">
           <span>基本パターン:</span>
           <NSwitch v-model:value="patternForm.is_basic" />
+          <span style="color: #8892a6; font-size: 12px">OFF = Wワーク(不定時刻)</span>
         </NSpace>
         <NButton type="primary" block @click="addPattern">追加</NButton>
       </NSpace>

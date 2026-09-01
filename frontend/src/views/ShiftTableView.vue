@@ -65,7 +65,7 @@ onMounted(async () => {
     await Promise.all([
       employeeStore.fetchAll(),
       ruleStore.fetchPatterns(),
-      ruleStore.fetchStaffing(),
+      ruleStore.fetchHourlyStaffing(),
       shiftStore.fetch(year.value, month.value),
     ])
   } finally {
@@ -98,13 +98,6 @@ const shiftTypeLabels: Record<string, string> = {
 function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
-
-// パターンコード → シフト区分(morning/evening/night) の対応
-const codeToCategory = computed<Record<string, string>>(() => {
-  const m: Record<string, string> = {}
-  for (const p of ruleStore.patterns) m[p.code] = p.category
-  return m
-})
 
 function isoLocalDate(d: Date): string {
   const y = d.getFullYear()
@@ -143,37 +136,41 @@ function cellStyle(date: Date) {
   return {}
 }
 
-// ---- 人数不足リマインド ----------------------------------------------------
-const CATEGORIES = ['morning', 'evening', 'night'] as const
-
-function requiredFor(dayCategory: string, category: string): number {
-  const r = ruleStore.staffing.find(
-    (s) => s.day_category === dayCategory && s.shift_category === category,
-  )
-  return r?.required ?? 0
+// ---- 人数不足リマインド（時間カバレッジ方式） ------------------------------
+// 割当がカバーする「拡張時」を返す（深夜跨ぎは 24=0:00, 25=1:00）。
+function assignmentHours(a: ShiftAssignment): number[] {
+  const s = parseInt(a.start_time.slice(0, 2), 10)
+  let e = parseInt(a.end_time.slice(0, 2), 10)
+  if (e <= s) e += 24 // 深夜跨ぎ
+  const hours: number[] = []
+  for (let h = s; h < e; h++) hours.push(h)
+  return hours
 }
 
 interface Shortfall {
   day: number
-  category: string
+  hour: number
   have: number
   need: number
 }
 
-// 各日・各区分の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
+// 各日・各時間の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
 const shortfalls = computed<Shortfall[]>(() => {
   const out: Shortfall[] = []
   if (!shift.value) return out
   for (const d of days.value) {
     const iso = isoLocalDate(d)
     const dayCategory = d.getDay() === 0 || d.getDay() === 6 ? 'weekend_or_holiday' : 'weekday'
-    for (const category of CATEGORIES) {
-      const need = requiredFor(dayCategory, category)
-      if (need <= 0) continue
-      const have = draft.value.filter(
-        (a) => a.target_date === iso && codeToCategory.value[a.shift_type] === category,
-      ).length
-      if (have < need) out.push({ day: d.getDate(), category, have, need })
+    // その日の各拡張時のカバレッジを集計
+    const cover: Record<number, number> = {}
+    for (const a of draft.value) {
+      if (a.target_date !== iso) continue
+      for (const h of assignmentHours(a)) cover[h] = (cover[h] ?? 0) + 1
+    }
+    for (const r of ruleStore.hourlyStaffing) {
+      if (r.day_category !== dayCategory || r.required <= 0) continue
+      const have = cover[r.hour] ?? 0
+      if (have < r.required) out.push({ day: d.getDate(), hour: r.hour, have, need: r.required })
     }
   }
   return out
@@ -375,7 +372,7 @@ function goPrint() {
           >
             <div class="shortfall-list">
               <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
-                {{ s.day }}日 {{ shiftTypeLabel(s.category) }} {{ s.have }}/{{ s.need }}人
+                {{ s.day }}日 {{ s.hour }}:00台 {{ s.have }}/{{ s.need }}人
               </span>
             </div>
             <p class="shortfall-note">

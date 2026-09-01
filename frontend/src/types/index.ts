@@ -49,10 +49,12 @@ export interface ShiftPattern {
 
 export type DayCategory = 'weekday' | 'weekend_or_holiday'
 
-export interface StaffingRule {
+// 時間カバレッジ方式（要件書§13）: 1時間ごとの必要人数。
+// hour は拡張時軸（1〜24）。24 = 翌0:00-1:00。
+export interface HourlyStaffingRule {
   id?: number
   day_category: DayCategory
-  shift_category: string
+  hour: number
   required: number
 }
 
