@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { GenerateShiftResult, PayrollReport, Shift, ShiftAssignment } from '@/types'
 
@@ -74,4 +74,8 @@ function isAxios404(err: unknown): boolean {
     'response' in err &&
     (err as { response?: { status?: number } }).response?.status === 404
   )
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useShiftStore, import.meta.hot))
 }

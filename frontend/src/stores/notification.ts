@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { AppNotification } from '@/types'
 
@@ -15,3 +15,7 @@ export const useNotificationStore = defineStore('notification', {
     },
   },
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useNotificationStore, import.meta.hot))
+}

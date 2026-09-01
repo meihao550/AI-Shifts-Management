@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { HourlyStaffingRule, ShiftPattern } from '@/types'
 
@@ -33,3 +33,7 @@ export const useRuleStore = defineStore('rule', {
     },
   },
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useRuleStore, import.meta.hot))
+}

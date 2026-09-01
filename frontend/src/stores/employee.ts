@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { Availability, AvailabilityKind, Employee } from '@/types'
 
@@ -55,3 +55,8 @@ export const useEmployeeStore = defineStore('employee', {
     },
   },
 })
+
+// アクション追加時に dev のホットリロードでストアが古いままにならないようにする
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useEmployeeStore, import.meta.hot))
+}
