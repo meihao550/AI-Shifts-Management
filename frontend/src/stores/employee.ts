@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '@/api/client'
-import type { Availability, Employee } from '@/types'
+import type { Availability, AvailabilityKind, Employee } from '@/types'
 
 interface State {
   employees: Employee[]
@@ -36,6 +36,14 @@ export const useEmployeeStore = defineStore('employee', {
     },
     async listAvailabilities(id: number): Promise<Availability[]> {
       const { data } = await api.get<Availability[]>(`/employees/${id}/availabilities`)
+      return data
+    },
+    async listAllAvailabilities(params: {
+      year?: number
+      month?: number
+      kind?: AvailabilityKind
+    }): Promise<Availability[]> {
+      const { data } = await api.get<Availability[]>('/employees/availabilities', { params })
       return data
     },
     async createAvailability(payload: Omit<Availability, 'id'>): Promise<Availability> {

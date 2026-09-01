@@ -1,14 +1,15 @@
 """Employee CRUD + availability endpoints."""
 
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
-from app.models.employee import Employee, EmployeeAvailability
+from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
 from app.schemas.employee import (
     AvailabilityCreate,
     AvailabilityRead,
@@ -75,6 +76,29 @@ def delete_employee(
     db.delete(employee)
     db.commit()
     return None
+
+
+@router.get("/availabilities", response_model=list[AvailabilityRead])
+def list_all_availabilities(
+    _user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    year: Annotated[int | None, Query()] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+    kind: Annotated[AvailabilityKind | None, Query()] = None,
+):
+    """全従業員の希望・不可・有給をまとめて取得（年月・種別で絞り込み可）。"""
+    stmt = select(EmployeeAvailability)
+    if kind is not None:
+        stmt = stmt.where(EmployeeAvailability.kind == kind)
+    if year is not None and month is not None:
+        month_start = date(year, month, 1)
+        month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        stmt = stmt.where(
+            EmployeeAvailability.target_date >= month_start,
+            EmployeeAvailability.target_date < month_end,
+        )
+    stmt = stmt.order_by(EmployeeAvailability.target_date)
+    return list(db.execute(stmt).scalars())
 
 
 @router.get("/{employee_id}/availabilities", response_model=list[AvailabilityRead])
