@@ -40,7 +40,9 @@ def _build_grid(
 
     per_emp_day: dict[int, dict[date, list[str]]] = defaultdict(lambda: defaultdict(list))
     for a in assignments:
-        per_emp_day[a.employee_id][a.target_date].append(a.shift_type)
+        # 実時間帯で表示する（例 20:00-01:00）。深夜跨ぎもそのまま。
+        cell = f"{a.start_time.strftime('%H:%M')}-{a.end_time.strftime('%H:%M')}"
+        per_emp_day[a.employee_id][a.target_date].append(cell)
 
     rows: list[list[str]] = []
     header = ["従業員"] + [f"{d.day}({'月火水木金土日'[d.weekday()]})" for d in days]

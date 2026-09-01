@@ -99,6 +99,16 @@ function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
 
+// "HH:MM:SS" → "HH:MM"
+function hhmm(t: string): string {
+  return t.slice(0, 5)
+}
+
+// 割当を実時間帯で表示する（例 20:00 - 01:00）。深夜跨ぎもそのまま表示。
+function timeRange(a: ShiftAssignment): string {
+  return `${hhmm(a.start_time)} - ${hhmm(a.end_time)}`
+}
+
 function isoLocalDate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -124,7 +134,7 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
 
   const mainMismatch = !!mainType && matches.some((a) => a.shift_type !== mainType)
   return {
-    label: matches.map((a) => shiftTypeLabel(a.shift_type)).join(', '),
+    label: matches.map((a) => timeRange(a)).join(', '),
     mainMismatch,
   }
 }
