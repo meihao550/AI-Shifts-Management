@@ -14,6 +14,8 @@ class PayrollRow(BaseModel):
     base_wage: int
     overnight_premium: int
     transport_cost_total: int
+    paid_leave_days: int
+    paid_leave_total: int
     insurance_status: InsuranceStatus
     grand_total: int
 

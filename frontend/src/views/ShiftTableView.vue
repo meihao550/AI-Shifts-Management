@@ -19,8 +19,11 @@ import {
 import { useShiftStore } from '@/stores/shift'
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
-import type { AvailabilityKind, ShiftAssignment } from '@/types'
+import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
+
+// セル編集で「有給」を表すための特別な選択値
+const PAID_LEAVE_VALUE = '__paid_leave__'
 
 const shiftStore = useShiftStore()
 const employeeStore = useEmployeeStore()
@@ -49,6 +52,23 @@ const loading = ref(false)
 const draft = ref<ShiftAssignment[]>([])
 const dirty = ref(false)
 
+// 当月の有給（従業員×日付）。カレンダー/セルから登録され、即時に永続化する。
+const paidLeaveList = ref<Availability[]>([])
+
+async function loadPaidLeave() {
+  paidLeaveList.value = await employeeStore.listAllAvailabilities({
+    year: year.value,
+    month: month.value,
+    kind: 'paid_leave',
+  })
+}
+
+function paidLeaveFor(employeeId: number, iso: string): Availability | undefined {
+  return paidLeaveList.value.find(
+    (a) => a.employee_id === employeeId && a.target_date === iso,
+  )
+}
+
 // store のシフトが変わったらドラフトを作り直す
 watch(
   () => shiftStore.shift,
@@ -65,8 +85,9 @@ onMounted(async () => {
     await Promise.all([
       employeeStore.fetchAll(),
       ruleStore.fetchPatterns(),
-      ruleStore.fetchStaffing(),
+      ruleStore.fetchHourlyStaffing(),
       shiftStore.fetch(year.value, month.value),
+      loadPaidLeave(),
     ])
   } finally {
     loading.value = false
@@ -99,12 +120,15 @@ function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
 
-// パターンコード → シフト区分(morning/evening/night) の対応
-const codeToCategory = computed<Record<string, string>>(() => {
-  const m: Record<string, string> = {}
-  for (const p of ruleStore.patterns) m[p.code] = p.category
-  return m
-})
+// "HH:MM:SS" → "HH:MM"
+function hhmm(t: string): string {
+  return t.slice(0, 5)
+}
+
+// 割当を実時間帯で表示する（例 20:00 - 01:00）。深夜跨ぎもそのまま表示。
+function timeRange(a: ShiftAssignment): string {
+  return `${hhmm(a.start_time)} - ${hhmm(a.end_time)}`
+}
 
 function isoLocalDate(d: Date): string {
   const y = d.getFullYear()
@@ -116,23 +140,31 @@ function isoLocalDate(d: Date): string {
 interface AssignmentCell {
   label: string
   mainMismatch: boolean
+  paidLeave: boolean
 }
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
-  if (!shift.value) return { label: '', mainMismatch: false }
+  if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false }
   const iso = isoLocalDate(date)
+
+  // 有給日はシフトより優先して「有給」と表示する
+  if (paidLeaveFor(employeeId, iso)) {
+    return { label: '有給', mainMismatch: false, paidLeave: true }
+  }
+
   const emp = employeeStore.employees.find((e) => e.id === employeeId)
   const mainType = emp?.main_shift_type ?? null
 
   const matches = draft.value.filter(
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
-  if (matches.length === 0) return { label: '', mainMismatch: false }
+  if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false }
 
   const mainMismatch = !!mainType && matches.some((a) => a.shift_type !== mainType)
   return {
-    label: matches.map((a) => shiftTypeLabel(a.shift_type)).join(', '),
+    label: matches.map((a) => timeRange(a)).join(', '),
     mainMismatch,
+    paidLeave: false,
   }
 }
 
@@ -143,37 +175,41 @@ function cellStyle(date: Date) {
   return {}
 }
 
-// ---- 人数不足リマインド ----------------------------------------------------
-const CATEGORIES = ['morning', 'evening', 'night'] as const
-
-function requiredFor(dayCategory: string, category: string): number {
-  const r = ruleStore.staffing.find(
-    (s) => s.day_category === dayCategory && s.shift_category === category,
-  )
-  return r?.required ?? 0
+// ---- 人数不足リマインド（時間カバレッジ方式） ------------------------------
+// 割当がカバーする「拡張時」を返す（深夜跨ぎは 24=0:00, 25=1:00）。
+function assignmentHours(a: ShiftAssignment): number[] {
+  const s = parseInt(a.start_time.slice(0, 2), 10)
+  let e = parseInt(a.end_time.slice(0, 2), 10)
+  if (e <= s) e += 24 // 深夜跨ぎ
+  const hours: number[] = []
+  for (let h = s; h < e; h++) hours.push(h)
+  return hours
 }
 
 interface Shortfall {
   day: number
-  category: string
+  hour: number
   have: number
   need: number
 }
 
-// 各日・各区分の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
+// 各日・各時間の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
 const shortfalls = computed<Shortfall[]>(() => {
   const out: Shortfall[] = []
   if (!shift.value) return out
   for (const d of days.value) {
     const iso = isoLocalDate(d)
     const dayCategory = d.getDay() === 0 || d.getDay() === 6 ? 'weekend_or_holiday' : 'weekday'
-    for (const category of CATEGORIES) {
-      const need = requiredFor(dayCategory, category)
-      if (need <= 0) continue
-      const have = draft.value.filter(
-        (a) => a.target_date === iso && codeToCategory.value[a.shift_type] === category,
-      ).length
-      if (have < need) out.push({ day: d.getDate(), category, have, need })
+    // その日の各拡張時のカバレッジを集計
+    const cover: Record<number, number> = {}
+    for (const a of draft.value) {
+      if (a.target_date !== iso) continue
+      for (const h of assignmentHours(a)) cover[h] = (cover[h] ?? 0) + 1
+    }
+    for (const r of ruleStore.hourlyStaffing) {
+      if (r.day_category !== dayCategory || r.required <= 0) continue
+      const have = cover[r.hour] ?? 0
+      if (have < r.required) out.push({ day: d.getDate(), hour: r.hour, have, need: r.required })
     }
   }
   return out
@@ -183,11 +219,21 @@ const shortfalls = computed<Shortfall[]>(() => {
 const editCell = ref<{ employee_id: number; date: string; empName: string } | null>(null)
 const editShiftType = ref<string | null>(null)
 
+// セル編集の選択肢: シフトパターン + 「有給」
+const cellEditOptions = computed(() => [
+  { label: '有給', value: PAID_LEAVE_VALUE },
+  ...ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
+])
+
 function openCellEdit(employeeId: number, date: Date) {
   if (!shift.value) return
   const iso = isoLocalDate(date)
-  const existing = draft.value.find((a) => a.employee_id === employeeId && a.target_date === iso)
-  editShiftType.value = existing?.shift_type ?? null
+  if (paidLeaveFor(employeeId, iso)) {
+    editShiftType.value = PAID_LEAVE_VALUE
+  } else {
+    const existing = draft.value.find((a) => a.employee_id === employeeId && a.target_date === iso)
+    editShiftType.value = existing?.shift_type ?? null
+  }
   editCell.value = {
     employee_id: employeeId,
     date: iso,
@@ -195,31 +241,60 @@ function openCellEdit(employeeId: number, date: Date) {
   }
 }
 
-function saveCellEdit() {
+async function saveCellEdit() {
   if (!editCell.value) return
   const { employee_id, date } = editCell.value
-  // その従業員・その日の既存割当を一旦削除
-  draft.value = draft.value.filter(
-    (a) => !(a.employee_id === employee_id && a.target_date === date),
-  )
   const code = editShiftType.value
-  if (code) {
-    const p = ruleStore.patterns.find((pp) => pp.code === code)
-    if (p) {
-      draft.value.push({
-        id: 0,
-        shift_id: shift.value?.id ?? 0,
-        employee_id,
-        target_date: date,
-        shift_type: p.code,
-        start_time: p.start_time,
-        end_time: p.end_time,
-        crosses_midnight: p.end_time <= p.start_time,
-      })
+  const existingLeave = paidLeaveFor(employee_id, date)
+
+  try {
+    if (code === PAID_LEAVE_VALUE) {
+      // 有給に設定: その日のシフト割当は外し、有給を登録（即時保存）
+      draft.value = draft.value.filter(
+        (a) => !(a.employee_id === employee_id && a.target_date === date),
+      )
+      if (!existingLeave) {
+        const created = await employeeStore.createAvailability({
+          employee_id,
+          target_date: date,
+          kind: 'paid_leave',
+          shift_type: null,
+          note: null,
+        })
+        paidLeaveList.value.push(created)
+      }
+      dirty.value = true
+    } else {
+      // 有給以外: 既存の有給があれば解除（即時保存）
+      if (existingLeave) {
+        await employeeStore.deleteAvailability(existingLeave.id)
+        paidLeaveList.value = paidLeaveList.value.filter((a) => a.id !== existingLeave.id)
+      }
+      // その従業員・その日の既存割当を一旦削除してから、選択があれば追加
+      draft.value = draft.value.filter(
+        (a) => !(a.employee_id === employee_id && a.target_date === date),
+      )
+      if (code) {
+        const p = ruleStore.patterns.find((pp) => pp.code === code)
+        if (p) {
+          draft.value.push({
+            id: 0,
+            shift_id: shift.value?.id ?? 0,
+            employee_id,
+            target_date: date,
+            shift_type: p.code,
+            start_time: p.start_time,
+            end_time: p.end_time,
+            crosses_midnight: p.end_time <= p.start_time,
+          })
+        }
+      }
+      dirty.value = true
     }
+    editCell.value = null
+  } catch (e) {
+    message.error(`更新失敗: ${(e as Error).message}`)
   }
-  dirty.value = true
-  editCell.value = null
 }
 
 async function saveShift() {
@@ -248,7 +323,7 @@ async function saveShift() {
 async function loadShift() {
   loading.value = true
   try {
-    await shiftStore.fetch(year.value, month.value)
+    await Promise.all([shiftStore.fetch(year.value, month.value), loadPaidLeave()])
   } finally {
     loading.value = false
   }
@@ -263,6 +338,7 @@ async function generate() {
       natural_language_note: naturalNote.value,
       use_llm: useLLM.value,
     })
+    await loadPaidLeave()
     if (res.warnings.length) {
       message.warning(res.warnings.join(' / '))
     } else {
@@ -375,7 +451,7 @@ function goPrint() {
           >
             <div class="shortfall-list">
               <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
-                {{ s.day }}日 {{ shiftTypeLabel(s.category) }} {{ s.have }}/{{ s.need }}人
+                {{ s.day }}日 {{ s.hour }}:00台 {{ s.have }}/{{ s.need }}人
               </span>
             </div>
             <p class="shortfall-note">
@@ -386,21 +462,25 @@ function goPrint() {
             <table class="shift-grid">
               <thead>
                 <tr>
-                  <th class="fixed">従業員</th>
-                  <th v-for="d in days" :key="d.getTime()" :style="cellStyle(d)">
-                    {{ d.getDate() }}
-                    <br />
-                    <small>{{ '日月火水木金土'[d.getDay()] }}</small>
+                  <th class="fixed">日付</th>
+                  <th v-for="emp in employeeStore.employees" :key="emp.id">
+                    {{ emp.name }}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="emp in employeeStore.employees" :key="emp.id">
-                  <td class="fixed">{{ emp.name }}</td>
-                  <template v-for="d in days" :key="d.getTime()">
+                <tr v-for="d in days" :key="d.getTime()">
+                  <td class="fixed" :style="cellStyle(d)">
+                    {{ d.getDate() }}
+                    <small>（{{ '日月火水木金土'[d.getDay()] }}）</small>
+                  </td>
+                  <template v-for="emp in employeeStore.employees" :key="emp.id">
                     <td
                       class="cell cell-editable"
-                      :class="{ 'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch }"
+                      :class="{
+                        'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch,
+                        'cell-paid-leave': assignmentsFor(emp.id, d).paidLeave,
+                      }"
                       :title="
                         assignmentsFor(emp.id, d).mainMismatch
                           ? `${emp.name} のメインシフト (${
@@ -467,7 +547,7 @@ function goPrint() {
         <p style="margin: 0">{{ editCell.empName }} / {{ editCell.date }}</p>
         <NSelect
           v-model:value="editShiftType"
-          :options="patternOptions"
+          :options="cellEditOptions"
           clearable
           placeholder="シフトなし（休み）"
         />
@@ -510,7 +590,8 @@ function goPrint() {
   background: #fff;
   z-index: 1;
   text-align: left;
-  min-width: 120px;
+  min-width: 68px;
+  white-space: nowrap;
 }
 .shift-grid th.fixed {
   background: #eaeef7;
@@ -525,6 +606,11 @@ function goPrint() {
 .shift-grid td.cell-main-mismatch {
   background: #ffe3e3;
   color: #c92a2a;
+  font-weight: 700;
+}
+.shift-grid td.cell-paid-leave {
+  background: #fff4e0;
+  color: #b06a12;
   font-weight: 700;
 }
 .shortfall-list {

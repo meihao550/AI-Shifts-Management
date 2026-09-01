@@ -1,6 +1,5 @@
 """Development-only helpers (seed data, reset)."""
 
-from datetime import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.employee import Employee, EmployeeAvailability
-from app.models.rule import DayCategory, ShiftPattern, StaffingRule
+from app.models.rule import HourlyStaffingRule, ShiftPattern
 from app.models.shift import Shift, ShiftAssignment
+from app.services.staffing import default_hourly_rules, default_patterns
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 settings = get_settings()
@@ -28,58 +28,10 @@ def seed(db: Annotated[Session, Depends(get_db)]):
     _require_dev()
 
     if not db.execute(select(ShiftPattern)).first():
-        db.add_all(
-            [
-                ShiftPattern(
-                    code="morning",
-                    label="朝 09:00-17:00",
-                    start_time=time(9, 0),
-                    end_time=time(17, 0),
-                    is_basic=True,
-                    category="morning",
-                ),
-                ShiftPattern(
-                    code="evening",
-                    label="夜 17:00-01:00",
-                    start_time=time(17, 0),
-                    end_time=time(1, 0),
-                    is_basic=True,
-                    category="evening",
-                ),
-                ShiftPattern(
-                    code="night",
-                    label="深夜 01:00-09:00",
-                    start_time=time(1, 0),
-                    end_time=time(9, 0),
-                    is_basic=True,
-                    category="night",
-                ),
-            ]
-        )
+        db.add_all([ShiftPattern(**p) for p in default_patterns()])
 
-    if not db.execute(select(StaffingRule)).first():
-        db.add_all(
-            [
-                StaffingRule(day_category=DayCategory.weekday, shift_category="morning", required=2),
-                StaffingRule(day_category=DayCategory.weekday, shift_category="evening", required=2),
-                StaffingRule(day_category=DayCategory.weekday, shift_category="night", required=1),
-                StaffingRule(
-                    day_category=DayCategory.weekend_or_holiday,
-                    shift_category="morning",
-                    required=3,
-                ),
-                StaffingRule(
-                    day_category=DayCategory.weekend_or_holiday,
-                    shift_category="evening",
-                    required=3,
-                ),
-                StaffingRule(
-                    day_category=DayCategory.weekend_or_holiday,
-                    shift_category="night",
-                    required=1,
-                ),
-            ]
-        )
+    if not db.execute(select(HourlyStaffingRule)).first():
+        db.add_all([HourlyStaffingRule(**r) for r in default_hourly_rules()])
 
     if not db.execute(select(Employee)).first():
         db.add_all(
@@ -92,6 +44,8 @@ def seed(db: Annotated[Session, Depends(get_db)]):
                     hourly_wage=1200,
                     main_shift_type=["morning", "evening", "night"][i % 3],
                     weekly_shifts=3 + (i % 3),
+                    # 5人に1人を Wワーク（掛け持ち）従業員として登録（デモ用）
+                    is_dual_worker=(i % 5 == 0),
                 )
                 for i in range(1, 26)
             ]
@@ -108,7 +62,7 @@ def reset(db: Annotated[Session, Depends(get_db)]):
     db.query(ShiftAssignment).delete()
     db.query(Shift).delete()
     db.query(EmployeeAvailability).delete()
-    db.query(StaffingRule).delete()
+    db.query(HourlyStaffingRule).delete()
     db.query(ShiftPattern).delete()
     db.query(Employee).delete()
     db.commit()

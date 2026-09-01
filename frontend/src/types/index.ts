@@ -21,12 +21,13 @@ export interface Employee {
   hourly_wage: number
   main_shift_type: string | null
   main_shift_pinned: boolean
+  is_dual_worker: boolean
   weekly_shifts: number
   role: UserRole
   active: boolean
 }
 
-export type AvailabilityKind = 'unavailable' | 'preferred'
+export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
 
 export interface Availability {
   id: number
@@ -49,10 +50,12 @@ export interface ShiftPattern {
 
 export type DayCategory = 'weekday' | 'weekend_or_holiday'
 
-export interface StaffingRule {
+// 時間カバレッジ方式（要件書§13）: 1時間ごとの必要人数。
+// hour は拡張時軸（1〜24）。24 = 翌0:00-1:00。
+export interface HourlyStaffingRule {
   id?: number
   day_category: DayCategory
-  shift_category: string
+  hour: number
   required: number
 }
 
@@ -86,6 +89,8 @@ export interface PayrollRow {
   base_wage: number
   overnight_premium: number
   transport_cost_total: number
+  paid_leave_days: number
+  paid_leave_total: number
   insurance_status: 'social' | 'employment' | 'none'
   grand_total: number
 }

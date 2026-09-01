@@ -8,13 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
-from app.models.rule import ShiftPattern, StaffingRule
+from app.models.rule import HourlyStaffingRule, ShiftPattern
 from app.schemas.rule import (
+    HourlyStaffingRuleCreate,
+    HourlyStaffingRuleRead,
     ShiftPatternCreate,
     ShiftPatternRead,
-    StaffingRuleCreate,
-    StaffingRuleRead,
 )
+from app.services.staffing import infer_category, make_pattern_code, make_pattern_label
 
 router = APIRouter(prefix="/rules", tags=["rules"])
 
@@ -30,7 +31,22 @@ def create_pattern(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    pat = ShiftPattern(**payload.model_dump())
+    # 時刻からコード・表示名・区分を自動生成する。ユーザーが追加するパターンは
+    # Wワーク扱い(is_basic=False)＝通常従業員には割り当てない。
+    code = make_pattern_code(payload.start_time, payload.end_time)
+    existing = db.execute(
+        select(ShiftPattern).where(ShiftPattern.code == code)
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="同じ時間帯のパターンが既に存在します")
+    pat = ShiftPattern(
+        code=code,
+        label=payload.label or make_pattern_label(payload.start_time, payload.end_time),
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        is_basic=False,
+        category=infer_category(payload.start_time, payload.end_time),
+    )
     db.add(pat)
     db.commit()
     db.refresh(pat)
@@ -46,19 +62,25 @@ def delete_pattern(pattern_id: int, _admin: AdminUser, db: Annotated[Session, De
     db.commit()
 
 
-@router.get("/staffing", response_model=list[StaffingRuleRead])
-def list_staffing(_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
-    return list(db.execute(select(StaffingRule).order_by(StaffingRule.id)).scalars())
+@router.get("/hourly-staffing", response_model=list[HourlyStaffingRuleRead])
+def list_hourly_staffing(_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
+    return list(
+        db.execute(
+            select(HourlyStaffingRule).order_by(
+                HourlyStaffingRule.day_category, HourlyStaffingRule.hour
+            )
+        ).scalars()
+    )
 
 
-@router.put("/staffing", response_model=list[StaffingRuleRead])
-def replace_staffing(
-    payload: list[StaffingRuleCreate],
+@router.put("/hourly-staffing", response_model=list[HourlyStaffingRuleRead])
+def replace_hourly_staffing(
+    payload: list[HourlyStaffingRuleCreate],
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    db.execute(StaffingRule.__table__.delete())
-    rows = [StaffingRule(**item.model_dump()) for item in payload]
+    db.execute(HourlyStaffingRule.__table__.delete())
+    rows = [HourlyStaffingRule(**item.model_dump()) for item in payload]
     db.add_all(rows)
     db.commit()
     for r in rows:

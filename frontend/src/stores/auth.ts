@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { Me } from '@/types'
 
@@ -47,3 +47,7 @@ export const useAuthStore = defineStore('auth', {
     },
   },
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useAuthStore, import.meta.hot))
+}

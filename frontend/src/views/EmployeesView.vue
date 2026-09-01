@@ -54,6 +54,12 @@ const columns: DataTableColumns<Employee> = [
     width: 60,
     render: (r) => (r.main_shift_pinned ? '📌' : ''),
   },
+  {
+    title: 'Wワーク',
+    key: 'is_dual_worker',
+    width: 80,
+    render: (r) => (r.is_dual_worker ? '○' : ''),
+  },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
   {
     title: 'ロール',
@@ -99,6 +105,7 @@ function openCreate() {
     hourly_wage: 1200,
     main_shift_type: 'morning',
     main_shift_pinned: false,
+    is_dual_worker: false,
     weekly_shifts: 3,
     role: 'employee',
     active: true,
@@ -172,6 +179,12 @@ async function remove(id: number) {
           <NSwitch v-model:value="form.main_shift_pinned" />
           <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
             ONで「メイン区分のみ」に配置（絶対遵守）
+          </span>
+        </NFormItem>
+        <NFormItem label="Wワーク(掛け持ち)">
+          <NSwitch v-model:value="form.is_dual_worker" />
+          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
+            ONでWワーク専用パターンにも配置可（OFFは基本パターンのみ）
           </span>
         </NFormItem>
         <NFormItem label="週勤務回数">
