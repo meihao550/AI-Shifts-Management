@@ -7,11 +7,9 @@ import {
   NInputNumber,
   NModal,
   NPopconfirm,
-  NSelect,
   NSpace,
   NTimePicker,
   NInput,
-  NSwitch,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -23,13 +21,10 @@ const message = useMessage()
 
 const showPattern = ref(false)
 const patternForm = ref<{
-  code: string
   label: string
   start_time: number | null
   end_time: number | null
-  category: string
-  is_basic: boolean
-}>({ code: '', label: '', start_time: null, end_time: null, category: 'morning', is_basic: true })
+}>({ label: '', start_time: null, end_time: null })
 
 function toTimeString(ms: number | null): string {
   if (ms == null) return '09:00:00'
@@ -63,17 +58,19 @@ const patternColumns: DataTableColumns<ShiftPattern> = [
 ]
 
 async function addPattern() {
+  if (patternForm.value.start_time == null || patternForm.value.end_time == null) {
+    message.warning('開始・終了時刻を入力してください')
+    return
+  }
   try {
     await store.createPattern({
-      code: patternForm.value.code,
-      label: patternForm.value.label,
       start_time: toTimeString(patternForm.value.start_time),
       end_time: toTimeString(patternForm.value.end_time),
-      category: patternForm.value.category,
-      is_basic: patternForm.value.is_basic,
+      label: patternForm.value.label || undefined,
     })
     message.success('追加しました')
     showPattern.value = false
+    patternForm.value = { label: '', start_time: null, end_time: null }
   } catch (e) {
     message.error(`追加失敗: ${(e as Error).message}`)
   }
@@ -194,27 +191,21 @@ onMounted(async () => {
     <NModal
       v-model:show="showPattern"
       preset="card"
-      title="シフトパターン追加"
-      style="width: 480px"
+      title="シフトパターン追加（時刻のみ）"
+      style="width: 420px"
     >
       <NSpace vertical>
-        <NInput v-model:value="patternForm.code" placeholder="コード (例: w_20_01)" />
-        <NInput v-model:value="patternForm.label" placeholder="表示名 (例: Wワーク 20:00-01:00)" />
-        <NTimePicker v-model:value="patternForm.start_time" format="HH:mm" placeholder="開始時刻" />
-        <NTimePicker v-model:value="patternForm.end_time" format="HH:mm" placeholder="終了時刻" />
-        <NSelect
-          v-model:value="patternForm.category"
-          :options="[
-            { label: '朝', value: 'morning' },
-            { label: '夜', value: 'evening' },
-            { label: '深夜', value: 'night' },
-          ]"
-        />
+        <p style="margin: 0; color: #6b7080; font-size: 12px">
+          開始・終了時刻だけ入力してください。表示名・区分は自動で決まります。
+          追加したパターンはWワーク向け（掛け持ち従業員のみ配置可）として登録されます。
+        </p>
         <NSpace align="center">
-          <span>基本パターン:</span>
-          <NSwitch v-model:value="patternForm.is_basic" />
-          <span style="color: #8892a6; font-size: 12px">OFF = Wワーク(不定時刻)</span>
+          <span>開始</span>
+          <NTimePicker v-model:value="patternForm.start_time" format="HH:mm" placeholder="開始時刻" />
+          <span>終了</span>
+          <NTimePicker v-model:value="patternForm.end_time" format="HH:mm" placeholder="終了時刻" />
         </NSpace>
+        <NInput v-model:value="patternForm.label" placeholder="表示名（任意・未入力なら自動）" />
         <NButton type="primary" block @click="addPattern">追加</NButton>
       </NSpace>
     </NModal>

@@ -14,8 +14,12 @@ class ShiftPatternBase(BaseModel):
     category: str  # morning | evening | night
 
 
-class ShiftPatternCreate(ShiftPatternBase):
-    pass
+# 追加は「時刻(開始-終了)」だけ。コード/表示名/区分/is_basic はサーバ側で自動生成する
+# （ユーザーにコードや区分を入力させない。要件10.5）。
+class ShiftPatternCreate(BaseModel):
+    start_time: time
+    end_time: time
+    label: str | None = None  # 未指定なら時刻から自動生成
 
 
 class ShiftPatternRead(ShiftPatternBase):

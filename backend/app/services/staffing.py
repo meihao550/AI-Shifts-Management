@@ -2,6 +2,9 @@
 
 時間カバレッジ方式（要件書§13）では、営業日を 1:00 起点で扱い、
 必要人数を「拡張時(hour)」ごとに持つ。24=翌0:00, 25=翌1:00。
+
+シフトパターンは要件6.1/6.2の標準セットをシステム側で用意する。ユーザーは
+コードや区分を手入力せず、時刻(開始-終了)だけで追加できる（コード/区分は自動生成）。
 """
 
 from __future__ import annotations
@@ -11,10 +14,50 @@ from datetime import time
 from app.models.rule import DayCategory
 
 
+def make_pattern_code(start: time, end: time) -> str:
+    """時刻からパターンコードを自動生成する（例 09:00-17:00 -> p_0900_1700）。"""
+    return f"p_{start.strftime('%H%M')}_{end.strftime('%H%M')}"
+
+
+def make_pattern_label(start: time, end: time) -> str:
+    """時刻から表示名を自動生成する（例 09:00-17:00）。"""
+    return f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
+
+
+def infer_category(start: time, end: time) -> str:
+    """時刻から区分(morning/evening/night)を自動判定する。
+
+    区分は必要人数の判定には使わない（時間カバレッジで判定）。
+    メインシフトの寄せ（ボーナス）でのみ参照するため、大まかで良い。
+    """
+    s = start.hour
+    e = end.hour
+    if 1 <= s < 9 and (s < e <= 9):  # 1:00-9:00 のような深夜帯
+        return "night"
+    if s < 12:  # 昼までに始まる → 朝
+        return "morning"
+    return "evening"  # それ以降 → 夜
+
+
+# 要件6.2 のWワーク（不定時刻）パターン。＋金土祝の追加要員 22-1（要確認）も含める。
+_WWORK_HOURS: list[tuple[int, int]] = [
+    (9, 15),
+    (9, 16),
+    (10, 17),
+    (10, 18),
+    (12, 20),
+    (15, 23),
+    (18, 20),
+    (18, 1),
+    (20, 1),
+    (22, 1),
+]
+
+
 def default_patterns() -> list[dict]:
-    """基本パターン(朝/夜/深夜) + Wワーク向けの不定時刻パターン。"""
-    return [
-        # --- 基本パターン ---
+    """基本パターン(要件6.1) + Wワーク向けの不定時刻パターン(要件6.2)。"""
+    patterns: list[dict] = [
+        # --- 基本パターン（コードは意味のある名前を維持） ---
         {
             "code": "morning",
             "label": "朝 09:00-17:00",
@@ -39,36 +82,25 @@ def default_patterns() -> list[dict]:
             "is_basic": True,
             "category": "night",
         },
-        # --- Wワーク向け（不定時刻） ---
-        {
-            "code": "w_09_15",
-            "label": "Wワーク 09:00-15:00",
-            "start_time": time(9, 0),
-            "end_time": time(15, 0),
-            "is_basic": False,
-            "category": "morning",
-        },
-        {
-            "code": "w_12_20",
-            "label": "Wワーク 12:00-20:00",
-            "start_time": time(12, 0),
-            "end_time": time(20, 0),
-            "is_basic": False,
-            "category": "evening",
-        },
-        {
-            "code": "w_20_01",
-            "label": "Wワーク 20:00-01:00",
-            "start_time": time(20, 0),
-            "end_time": time(1, 0),
-            "is_basic": False,
-            "category": "evening",
-        },
     ]
+    # --- Wワーク向け（不定時刻）。コード/区分は自動生成 ---
+    for sh, eh in _WWORK_HOURS:
+        st, et = time(sh, 0), time(eh, 0)
+        patterns.append(
+            {
+                "code": make_pattern_code(st, et),
+                "label": make_pattern_label(st, et),
+                "start_time": st,
+                "end_time": et,
+                "is_basic": False,
+                "category": infer_category(st, et),
+            }
+        )
+    return patterns
 
 
 # 1時間ごとの必要人数のデフォルト（拡張時 1..24）。
-# 深夜(1-8) は 1 人、営業ピークの朝(9-16)・夜(17-24) は平日2/土日祝3 人。
+# 深夜(1-8) は 1 人、営業ピークの朝(9-16)・夜(17-24) は平日2/金土日祝3 人（要件6.3）。
 def default_hourly_rules() -> list[dict]:
     rules: list[dict] = []
 
@@ -78,11 +110,11 @@ def default_hourly_rules() -> list[dict]:
                 {"day_category": day_category, "hour": h, "required": required}
             )
 
-    # 平日
+    # 平日（月〜木）
     add(DayCategory.weekday, range(1, 9), 1)  # 深夜 1:00-9:00
     add(DayCategory.weekday, range(9, 17), 2)  # 朝 9:00-17:00
     add(DayCategory.weekday, range(17, 25), 2)  # 夜 17:00-翌1:00
-    # 土日祝
+    # 金・土・日・祝（繁忙区分）
     add(DayCategory.weekend_or_holiday, range(1, 9), 1)
     add(DayCategory.weekend_or_holiday, range(9, 17), 3)
     add(DayCategory.weekend_or_holiday, range(17, 25), 3)

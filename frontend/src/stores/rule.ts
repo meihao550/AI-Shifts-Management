@@ -14,7 +14,8 @@ export const useRuleStore = defineStore('rule', {
       const { data } = await api.get<ShiftPattern[]>('/rules/patterns')
       this.patterns = data
     },
-    async createPattern(payload: Omit<ShiftPattern, 'id'>) {
+    // 追加は時刻のみ。コード/区分はサーバ側で自動生成する。
+    async createPattern(payload: { start_time: string; end_time: string; label?: string }) {
       const { data } = await api.post<ShiftPattern>('/rules/patterns', payload)
       this.patterns.push(data)
     },

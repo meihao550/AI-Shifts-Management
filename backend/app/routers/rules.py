@@ -15,6 +15,7 @@ from app.schemas.rule import (
     ShiftPatternCreate,
     ShiftPatternRead,
 )
+from app.services.staffing import infer_category, make_pattern_code, make_pattern_label
 
 router = APIRouter(prefix="/rules", tags=["rules"])
 
@@ -30,7 +31,22 @@ def create_pattern(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    pat = ShiftPattern(**payload.model_dump())
+    # 時刻からコード・表示名・区分を自動生成する。ユーザーが追加するパターンは
+    # Wワーク扱い(is_basic=False)＝通常従業員には割り当てない。
+    code = make_pattern_code(payload.start_time, payload.end_time)
+    existing = db.execute(
+        select(ShiftPattern).where(ShiftPattern.code == code)
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="同じ時間帯のパターンが既に存在します")
+    pat = ShiftPattern(
+        code=code,
+        label=payload.label or make_pattern_label(payload.start_time, payload.end_time),
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        is_basic=False,
+        category=infer_category(payload.start_time, payload.end_time),
+    )
     db.add(pat)
     db.commit()
     db.refresh(pat)
