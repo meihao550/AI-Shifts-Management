@@ -8,10 +8,10 @@ from app.schemas.employee import (
 )
 from app.schemas.payroll import PayrollDay, PayrollReport, PayrollRow
 from app.schemas.rule import (
+    HourlyStaffingRuleCreate,
+    HourlyStaffingRuleRead,
     ShiftPatternCreate,
     ShiftPatternRead,
-    StaffingRuleCreate,
-    StaffingRuleRead,
 )
 from app.schemas.shift import (
     ShiftAssignmentCreate,
@@ -35,8 +35,8 @@ __all__ = [
     "PayrollRow",
     "ShiftPatternCreate",
     "ShiftPatternRead",
-    "StaffingRuleCreate",
-    "StaffingRuleRead",
+    "HourlyStaffingRuleCreate",
+    "HourlyStaffingRuleRead",
     "ShiftAssignmentCreate",
     "ShiftAssignmentRead",
     "ShiftGenerateRequest",

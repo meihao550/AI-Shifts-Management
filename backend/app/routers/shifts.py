@@ -11,7 +11,7 @@ from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
 from app.models.employee import Employee, EmployeeAvailability
 from app.models.pair import EmployeePairConstraint
-from app.models.rule import DayCategory, ShiftPattern, StaffingRule
+from app.models.rule import HourlyStaffingRule, ShiftPattern
 from app.models.shift import Shift, ShiftAssignment, ShiftStatus
 from app.schemas.shift import (
     ShiftAssignmentCreate,
@@ -29,6 +29,7 @@ from app.services.scheduler import (
     PatternSpec,
     ShiftScheduler,
 )
+from app.services.staffing import default_hourly_rules, default_patterns
 
 router = APIRouter(prefix="/shifts", tags=["shifts"])
 
@@ -77,53 +78,20 @@ async def generate_shift(
 
     patterns = list(db.execute(select(ShiftPattern)).scalars())
     if not patterns:
-        # Auto-seed defaults so first-time users can generate immediately.
-        from datetime import time as _time
-
-        db.add_all(
-            [
-                ShiftPattern(
-                    code="morning",
-                    label="朝 09:00-17:00",
-                    start_time=_time(9, 0),
-                    end_time=_time(17, 0),
-                    is_basic=True,
-                    category="morning",
-                ),
-                ShiftPattern(
-                    code="evening",
-                    label="夜 17:00-01:00",
-                    start_time=_time(17, 0),
-                    end_time=_time(1, 0),
-                    is_basic=True,
-                    category="evening",
-                ),
-                ShiftPattern(
-                    code="night",
-                    label="深夜 01:00-09:00",
-                    start_time=_time(1, 0),
-                    end_time=_time(9, 0),
-                    is_basic=True,
-                    category="night",
-                ),
-            ]
-        )
+        # Auto-seed defaults (基本 + Wワーク) so first-time users can generate immediately.
+        db.add_all([ShiftPattern(**p) for p in default_patterns()])
         db.commit()
         patterns = list(db.execute(select(ShiftPattern)).scalars())
 
-    staffing_rows = list(db.execute(select(StaffingRule)).scalars())
-    staffing_map: dict[tuple[str, str], int] = {
-        (r.day_category.value, r.shift_category): r.required for r in staffing_rows
+    staffing_rows = list(db.execute(select(HourlyStaffingRule)).scalars())
+    staffing_map: dict[tuple[str, int], int] = {
+        (r.day_category.value, r.hour): r.required for r in staffing_rows
     }
     if not staffing_map:
-        # sensible defaults per PDF spec
+        # 時間別必要人数のデフォルト（時間カバレッジ方式）
         staffing_map = {
-            (DayCategory.weekday.value, "morning"): 2,
-            (DayCategory.weekday.value, "evening"): 2,
-            (DayCategory.weekday.value, "night"): 1,
-            (DayCategory.weekend_or_holiday.value, "morning"): 3,
-            (DayCategory.weekend_or_holiday.value, "evening"): 3,
-            (DayCategory.weekend_or_holiday.value, "night"): 1,
+            (r["day_category"].value, r["hour"]): r["required"]
+            for r in default_hourly_rules()
         }
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
@@ -132,19 +100,14 @@ async def generate_shift(
     pair_rows = list(db.execute(select(EmployeePairConstraint)).scalars())
     forbidden_pairs = [(p.employee_a_id, p.employee_b_id) for p in pair_rows]
 
-    max_daily_demand = max(
-        staffing_map.get(("weekday", "morning"), 0)
-        + staffing_map.get(("weekday", "evening"), 0)
-        + staffing_map.get(("weekday", "night"), 0),
-        staffing_map.get(("weekend_or_holiday", "morning"), 0)
-        + staffing_map.get(("weekend_or_holiday", "evening"), 0)
-        + staffing_map.get(("weekend_or_holiday", "night"), 0),
-    )
-    if len(employees) < max_daily_demand:
+    # ピーク時（1 時間で最も多くの人数が必要な時間帯）を下回る人数しかいなければ、
+    # どうやっても各時間を満たせないので早めに知らせる。
+    peak_demand = max(staffing_map.values(), default=0)
+    if len(employees) < peak_demand:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"必要人員 (1 日最大 {max_daily_demand} 名) に対して有効な従業員が "
+                f"必要人員 (ピーク時 {peak_demand} 名) に対して有効な従業員が "
                 f"{len(employees)} 名しかいません。従業員を追加するか、"
                 "ルール設定で必要人員を減らしてください。"
             ),

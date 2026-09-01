@@ -23,16 +23,16 @@ class ShiftPatternRead(ShiftPatternBase):
     id: int
 
 
-class StaffingRuleBase(BaseModel):
+class HourlyStaffingRuleBase(BaseModel):
     day_category: DayCategory
-    shift_category: str  # morning | evening | night
+    hour: int  # 拡張時軸（0〜25）。24=翌0:00, 25=翌1:00
     required: int
 
 
-class StaffingRuleCreate(StaffingRuleBase):
+class HourlyStaffingRuleCreate(HourlyStaffingRuleBase):
     pass
 
 
-class StaffingRuleRead(StaffingRuleBase):
+class HourlyStaffingRuleRead(HourlyStaffingRuleBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
