@@ -60,6 +60,7 @@ class EmployeeSpec:
     main_shift_type: str | None  # メインのシフト: Noneの場合もある
     hourly_wage: int
     main_shift_pinned: bool = False  # True ならメイン区分のみに配置(ハード制約)
+    is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
 
 
 @dataclass
@@ -205,6 +206,16 @@ class ShiftScheduler:
                     for p in pats:
                         if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
                             model.Add(x[(e.id, d, p.id)] == 0)
+
+        # Hard: Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに配置する。
+        # 通常従業員(is_dual_worker=False)はWワーク専用パターンには入れない。
+        for e in emps:
+            if e.is_dual_worker:
+                continue
+            for d in days:
+                for p in pats:
+                    if not p.is_basic:
+                        model.Add(x[(e.id, d, p.id)] == 0)
 
         # Constraint: 時間カバレッジ。各日 d・各時 h で、その時間をカバーするパターンに
         # 入っている人数の合計 == 必要人数。深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。

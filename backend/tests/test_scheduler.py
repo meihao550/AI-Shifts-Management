@@ -198,6 +198,42 @@ def test_pinned_employee_only_gets_main_category():
             assert code_to_category[asg["shift_type"]] == "morning"
 
 
+def test_dual_worker_pattern_only_for_dual_workers():
+    """Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに割り当てられる。"""
+    w_pattern = PatternSpec(
+        id=3,
+        code="w_20_01",
+        label="Wワーク 20:00-01:00",
+        start=time(20, 0),
+        end=time(1, 0),
+        category="evening",
+        is_basic=False,  # ← Wワーク専用
+    )
+    normal = EmployeeSpec(
+        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
+    )
+    dual = EmployeeSpec(
+        id=2,
+        name="Wワーク",
+        weekly_target=7,
+        main_shift_type=None,
+        hourly_wage=1000,
+        is_dual_worker=True,
+    )
+    # 20-24時台に 1 人必要 → Wワーク専用パターンでしか埋められない。
+    result = _make_scheduler(
+        patterns=[MORNING, w_pattern],
+        staffing_rules=_hourly((range(20, 25), 1)),
+        employees=[normal, dual],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    # Wワーク専用パターンに入っているのはWワーク従業員(id=2)だけ
+    for a in result.assignments:
+        if a["shift_type"] == "w_20_01":
+            assert a["employee_id"] == 2
+
+
 def test_staffing_shortage_recommends_hiring():
     """必要人数に対し従業員が足りないとき、採用を促す警告が出る。"""
     result = _make_scheduler(

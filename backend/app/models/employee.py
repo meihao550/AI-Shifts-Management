@@ -43,6 +43,9 @@ class Employee(Base):
     main_shift_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # メインシフトを絶対遵守（ピン）。True ならメイン区分のみに配置するハード制約にする
     main_shift_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Wワーク（掛け持ち）従業員か。True なら基本+Wワーク専用パターンの両方に入れる。
+    # False（通常従業員）は基本パターンのみ（Wワーク専用パターンには配置しない）。
+    is_dual_worker: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 週に何回入るか
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     # 有給

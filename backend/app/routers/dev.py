@@ -44,6 +44,8 @@ def seed(db: Annotated[Session, Depends(get_db)]):
                     hourly_wage=1200,
                     main_shift_type=["morning", "evening", "night"][i % 3],
                     weekly_shifts=3 + (i % 3),
+                    # 5人に1人を Wワーク（掛け持ち）従業員として登録（デモ用）
+                    is_dual_worker=(i % 5 == 0),
                 )
                 for i in range(1, 26)
             ]
