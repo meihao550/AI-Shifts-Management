@@ -393,18 +393,19 @@ function goPrint() {
             <table class="shift-grid">
               <thead>
                 <tr>
-                  <th class="fixed">従業員</th>
-                  <th v-for="d in days" :key="d.getTime()" :style="cellStyle(d)">
-                    {{ d.getDate() }}
-                    <br />
-                    <small>{{ '日月火水木金土'[d.getDay()] }}</small>
+                  <th class="fixed">日付</th>
+                  <th v-for="emp in employeeStore.employees" :key="emp.id">
+                    {{ emp.name }}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="emp in employeeStore.employees" :key="emp.id">
-                  <td class="fixed">{{ emp.name }}</td>
-                  <template v-for="d in days" :key="d.getTime()">
+                <tr v-for="d in days" :key="d.getTime()">
+                  <td class="fixed" :style="cellStyle(d)">
+                    {{ d.getDate() }}
+                    <small>（{{ '日月火水木金土'[d.getDay()] }}）</small>
+                  </td>
+                  <template v-for="emp in employeeStore.employees" :key="emp.id">
                     <td
                       class="cell cell-editable"
                       :class="{ 'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch }"
@@ -517,7 +518,8 @@ function goPrint() {
   background: #fff;
   z-index: 1;
   text-align: left;
-  min-width: 120px;
+  min-width: 68px;
+  white-space: nowrap;
 }
 .shift-grid th.fixed {
   background: #eaeef7;
