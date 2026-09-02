@@ -145,6 +145,13 @@ interface AssignmentCell {
   paidLeave: boolean
 }
 
+// 割当の shift_type にはパターンの code が入る。メイン照合は区分(category)でも
+// 一致とみなす（scheduler.py と同じく code / category の二本立て）。
+function categoryOfCode(shiftCode: string | null): string | null {
+  if (!shiftCode) return null
+  return ruleStore.patterns.find((p) => p.code === shiftCode)?.category ?? null
+}
+
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false }
   const iso = isoLocalDate(date)
@@ -162,7 +169,12 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   )
   if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false }
 
-  const mainMismatch = !!mainType && matches.some((a) => a.shift_type !== mainType)
+  // code そのもの、または区分(category)が main_shift_type と一致すればメイン扱い。
+  const mainMismatch =
+    !!mainType &&
+    matches.some(
+      (a) => a.shift_type !== mainType && categoryOfCode(a.shift_type) !== mainType,
+    )
   return {
     label: matches.map((a) => timeRange(a)).join(', '),
     mainMismatch,
