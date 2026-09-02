@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { NButton, NPopover, NSelect, NSpace, NSpin, NTag, useMessage } from 'naive-ui'
+import {
+  NButton,
+  NModal,
+  NRadio,
+  NRadioGroup,
+  NSelect,
+  NSpace,
+  NSpin,
+  NTag,
+  useMessage,
+} from 'naive-ui'
 import { useEmployeeStore } from '@/stores/employee'
 import type { Availability, AvailabilityKind } from '@/types'
 
@@ -12,6 +22,22 @@ const message = useMessage()
 const selectedEmployeeId = ref<number | null>(null)
 const availabilities = ref<Availability[]>([])
 const loading = ref(false)
+
+// 日付クリックで開くモーダルの状態
+const showModal = ref(false)
+const modalDate = ref<Date | null>(null)
+const modalKind = ref<AvailabilityKind | null>(null)
+const startHour = ref<number | null>(null) // 希望開始「時」(0-23)。1時間単位
+const endHour = ref<number | null>(null) // 希望終了「時」(0-23)。開始以前なら翌日扱い
+
+// 0:00〜23:00 の1時間刻み
+const hourOptions = Array.from({ length: 24 }, (_, h) => ({ label: `${h}:00`, value: h }))
+
+const modalTitle = computed(() =>
+  modalDate.value
+    ? `${modalDate.value.getFullYear()}/${modalDate.value.getMonth() + 1}/${modalDate.value.getDate()}`
+    : '',
+)
 
 const employeeOptions = computed(() =>
   employeeStore.employees.map((e) => ({ label: e.name, value: e.id })),
@@ -65,7 +91,7 @@ function itemsOn(d: Date): Availability[] {
   return availabilities.value.filter((a) => a.target_date === iso)
 }
 
-async function add(kind: AvailabilityKind, d: Date) {
+async function add(kind: AvailabilityKind, d: Date, note: string | null = null) {
   if (!selectedEmployeeId.value) return
   try {
     const created = await employeeStore.createAvailability({
@@ -73,13 +99,42 @@ async function add(kind: AvailabilityKind, d: Date) {
       target_date: isoDate(d),
       kind,
       shift_type: null,
-      note: null,
+      note,
     })
     availabilities.value.push(created)
     message.success(`${isoDate(d)} を ${kindLabels[kind]} に追加しました`)
   } catch (e) {
     message.error(`登録失敗: ${(e as Error).message}`)
   }
+}
+
+// 日付セルのクリックでモーダルを開く（入力状態はリセット）
+function openDay(d: Date) {
+  modalDate.value = d
+  modalKind.value = null
+  startHour.value = null
+  endHour.value = null
+  showModal.value = true
+}
+
+// モーダルの「登録」。希望日のときだけ開始・終了「時」を note に保存する。
+// 終了 <= 開始 は翌日扱い（例 20:00-01:00 = 翌1:00）。解釈はバックエンドに合わせる。
+async function confirmAdd() {
+  if (!modalDate.value || !modalKind.value) {
+    message.warning('種別を選択してください')
+    return
+  }
+  let note: string | null = null
+  if (modalKind.value === 'preferred') {
+    if (startHour.value == null || endHour.value == null) {
+      message.warning('開始・終了時刻を選択してください')
+      return
+    }
+    const pad = (h: number) => String(h).padStart(2, '0')
+    note = `${pad(startHour.value)}:00-${pad(endHour.value)}:00`
+  }
+  await add(modalKind.value, modalDate.value, note)
+  showModal.value = false
 }
 
 async function remove(id: number) {
@@ -139,67 +194,87 @@ function dayColor(d: Date) {
           :key="`pad-${i}`"
           class="pad"
         />
-        <NPopover
+        <div
           v-for="d in days"
           :key="d.getTime()"
-          trigger="click"
-          placement="bottom"
+          :class="dayClass(d)"
+          :style="{ color: dayColor(d) }"
+          @click="openDay(d)"
         >
-          <template #trigger>
-            <div :class="dayClass(d)" :style="{ color: dayColor(d) }">
-              <div class="num">{{ d.getDate() }}</div>
-              <div class="marks">
-                <span
-                  v-if="itemsOn(d).some((i) => i.kind === 'unavailable')"
-                  class="mark mark--unavailable"
-                >休</span>
-                <span
-                  v-if="itemsOn(d).some((i) => i.kind === 'preferred')"
-                  class="mark mark--preferred"
-                >希</span>
-                <span
-                  v-if="itemsOn(d).some((i) => i.kind === 'paid_leave')"
-                  class="mark mark--paid-leave"
-                >有</span>
-              </div>
-            </div>
-          </template>
-          <div style="min-width: 200px">
-            <p style="margin: 0 0 8px; font-weight: 600">
-              {{ d.getFullYear() }}/{{ d.getMonth() + 1 }}/{{ d.getDate() }}
-            </p>
-            <NSpace vertical size="small">
-              <div v-for="a in itemsOn(d)" :key="a.id" class="item-row">
-                <NTag
-                  :type="
-                    a.kind === 'unavailable'
-                      ? 'error'
-                      : a.kind === 'paid_leave'
-                        ? 'warning'
-                        : 'success'
-                  "
-                  size="small"
-                >
-                  {{ kindLabels[a.kind] }}
-                </NTag>
-                <NButton size="tiny" quaternary type="error" @click="remove(a.id)">削除</NButton>
-              </div>
-              <NSpace>
-                <NButton size="small" type="error" ghost @click="add('unavailable', d)">
-                  休日として登録
-                </NButton>
-                <NButton size="small" type="success" ghost @click="add('preferred', d)">
-                  希望日として登録
-                </NButton>
-                <NButton size="small" type="warning" ghost @click="add('paid_leave', d)">
-                  有給として登録
-                </NButton>
-              </NSpace>
-            </NSpace>
+          <div class="num">{{ d.getDate() }}</div>
+          <div class="marks">
+            <span
+              v-if="itemsOn(d).some((i) => i.kind === 'unavailable')"
+              class="mark mark--unavailable"
+            >休</span>
+            <span
+              v-if="itemsOn(d).some((i) => i.kind === 'preferred')"
+              class="mark mark--preferred"
+            >希</span>
+            <span
+              v-if="itemsOn(d).some((i) => i.kind === 'paid_leave')"
+              class="mark mark--paid-leave"
+            >有</span>
           </div>
-        </NPopover>
+        </div>
       </div>
     </NSpin>
+
+    <NModal v-model:show="showModal" preset="card" :title="modalTitle" style="width: 420px">
+      <NSpace vertical>
+        <!-- 既に登録済みの内容（削除もここから） -->
+        <div v-if="modalDate">
+          <div v-for="a in itemsOn(modalDate)" :key="a.id" class="item-row">
+            <NTag
+              :type="
+                a.kind === 'unavailable'
+                  ? 'error'
+                  : a.kind === 'paid_leave'
+                    ? 'warning'
+                    : 'success'
+              "
+              size="small"
+            >
+              {{ kindLabels[a.kind] }}<template v-if="a.note"> ({{ a.note }})</template>
+            </NTag>
+            <NButton size="tiny" quaternary type="error" @click="remove(a.id)">削除</NButton>
+          </div>
+        </div>
+
+        <!-- 種別を選択。希望日のときだけ時刻欄が出る -->
+        <NRadioGroup v-model:value="modalKind">
+          <NSpace vertical>
+            <NRadio value="unavailable">休日として登録</NRadio>
+            <NRadio value="preferred">希望日として登録</NRadio>
+            <NRadio value="paid_leave">有給として登録</NRadio>
+          </NSpace>
+        </NRadioGroup>
+
+        <div v-if="modalKind === 'preferred'">
+          <NSpace align="center">
+            <span>開始</span>
+            <NSelect
+              v-model:value="startHour"
+              :options="hourOptions"
+              placeholder="開始時"
+              style="width: 110px"
+            />
+            <span>終了</span>
+            <NSelect
+              v-model:value="endHour"
+              :options="hourOptions"
+              placeholder="終了時"
+              style="width: 110px"
+            />
+          </NSpace>
+          <p class="hint" style="margin: 6px 0 0">
+            1時間単位で選択。終了が開始以前なら翌日扱い（例: 20:00→翌1:00）。
+          </p>
+        </div>
+
+        <NButton type="primary" block :disabled="!modalKind" @click="confirmAdd">登録</NButton>
+      </NSpace>
+    </NModal>
   </div>
 </template>
 
