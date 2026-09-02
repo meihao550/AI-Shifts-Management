@@ -120,14 +120,16 @@ function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
 
-// "HH:MM:SS" → "HH:MM"
-function hhmm(t: string): string {
-  return t.slice(0, 5)
+// "HH:MM:SS" → "H"（ちょうどの時刻）/ "H:MM"（分あり）。内部は HH:MM のまま保持し表示のみ簡略化。
+function hourLabel(t: string): string {
+  const [hh, mm] = t.split(':')
+  const hour = parseInt(hh, 10)
+  return mm === '00' ? `${hour}` : `${hour}:${mm}`
 }
 
-// 割当を実時間帯で表示する（例 20:00 - 01:00）。深夜跨ぎもそのまま表示。
+// 割当を実時間帯で表示する（例 20:00-00:00 → "20 - 0"）。深夜跨ぎもそのまま表示。
 function timeRange(a: ShiftAssignment): string {
-  return `${hhmm(a.start_time)} - ${hhmm(a.end_time)}`
+  return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
 }
 
 function isoLocalDate(d: Date): string {
