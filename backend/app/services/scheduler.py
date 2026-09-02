@@ -72,6 +72,7 @@ class AvailabilitySpec:
     target_date: date
     kind: str  # unavailable | preferred
     shift_type: str | None = None
+    note: str | None = None  # 希望日の時間帯 "HH:MM-HH:MM"（任意）
 
 
 @dataclass
@@ -134,12 +135,18 @@ class ShiftScheduler:
                 continue
         return s
 
-    def _preferred_lookup(self) -> set[tuple[int, date, str | None]]:
-        s: set[tuple[int, date, str | None]] = set()
+    def _preferred_lookup(
+        self,
+    ) -> list[tuple[int, date, str | None, frozenset[int]]]:
+        # (employee_id, date, shift_type, 希望時間帯の拡張時集合)。
+        # 時間指定が無い希望日は空集合を持つ。
+        out: list[tuple[int, date, str | None, frozenset[int]]] = []
         for a in self.availabilities:
             if a.kind == "preferred":
-                s.add((a.employee_id, a.target_date, a.shift_type))
-        return s
+                out.append(
+                    (a.employee_id, a.target_date, a.shift_type, _parse_note_hours(a.note))
+                )
+        return out
 
     def solve(self) -> SchedulerResult:
         """まず「各時間ちょうど(==)」のハード制約で解く。
@@ -304,13 +311,22 @@ class ShiftScheduler:
                 f"全ての時間を満たすには、あと約 {hire} 人の採用を検討してください。"
             )
 
-        # Soft preference bonus
-        bonus_terms = []
-        for eid, d, shift_type in preferred:
+        # Soft preference bonus。希望日に時間帯(note "HH:MM-HH:MM")があれば、
+        # その時間とパターンのカバー時間の重なり「時間数」だけ加点する（1時間単位）。
+        # 時間指定なしの希望日は従来どおりマッチ 1 件につき一律 +1。
+        bonus_terms: list[Any] = []
+        for eid, d, shift_type, pref_hours in preferred:
             for p in pats:
                 if shift_type and p.code != shift_type and p.category != shift_type:
                     continue
-                if (eid, d, p.id) in x:
+                if (eid, d, p.id) not in x:
+                    continue
+                if pref_hours:
+                    overlap = len(pref_hours & pat_hours[p.id])
+                    if overlap == 0:
+                        continue
+                    bonus_terms.append(overlap * x[(eid, d, p.id)])
+                else:
                     bonus_terms.append(x[(eid, d, p.id)])
 
         # ハード制約：禁止ペア（人間関係などによる）は時間帯が重なって同時勤務しない（H-6）。
@@ -455,6 +471,28 @@ class ShiftScheduler:
 
 def _crosses_midnight(start: time, end: time) -> bool:
     return end <= start
+
+
+def _parse_note_hours(note: str | None) -> frozenset[int]:
+    """希望日メモ "HH:MM-HH:MM" を拡張時集合に変換する（_pattern_hours と同じ規約）。
+
+    解釈できない書式や時間指定なしのときは空集合を返す。
+    例: "09:00-17:00" -> {9..16} / "20:00-01:00" -> {20..24}（深夜跨ぎ）。
+    分は切り捨て（時間粒度で扱う）。
+    """
+    if not note:
+        return frozenset()
+    try:
+        start_s, end_s = note.split("-")
+        s = int(start_s.split(":")[0])
+        e = int(end_s.split(":")[0])
+    except (ValueError, IndexError):
+        return frozenset()
+    if not (0 <= s <= 24 and 0 <= e <= 24):
+        return frozenset()
+    if e <= s:  # 深夜跨ぎ（例 20:00-01:00）は翌日側を +24 する
+        e += 24
+    return frozenset(range(s, e))
 
 
 def _pattern_hours(start: time, end: time) -> set[int]:

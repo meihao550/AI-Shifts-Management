@@ -163,6 +163,7 @@ async def generate_shift(
                 target_date=a.target_date,
                 kind=a.kind.value,
                 shift_type=a.shift_type,
+                note=a.note,
             )
             for a in availability_rows
         ],

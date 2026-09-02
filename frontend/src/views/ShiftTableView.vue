@@ -120,14 +120,16 @@ function shiftTypeLabel(code: string): string {
   return shiftTypeLabels[code] ?? code
 }
 
-// "HH:MM:SS" → "HH:MM"
-function hhmm(t: string): string {
-  return t.slice(0, 5)
+// "HH:MM:SS" → "H"（ちょうどの時刻）/ "H:MM"（分あり）。内部は HH:MM のまま保持し表示のみ簡略化。
+function hourLabel(t: string): string {
+  const [hh, mm] = t.split(':')
+  const hour = parseInt(hh, 10)
+  return mm === '00' ? `${hour}` : `${hour}:${mm}`
 }
 
-// 割当を実時間帯で表示する（例 20:00 - 01:00）。深夜跨ぎもそのまま表示。
+// 割当を実時間帯で表示する（例 20:00-00:00 → "20 - 0"）。深夜跨ぎもそのまま表示。
 function timeRange(a: ShiftAssignment): string {
-  return `${hhmm(a.start_time)} - ${hhmm(a.end_time)}`
+  return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
 }
 
 function isoLocalDate(d: Date): string {
@@ -141,6 +143,13 @@ interface AssignmentCell {
   label: string
   mainMismatch: boolean
   paidLeave: boolean
+}
+
+// 割当の shift_type にはパターンの code が入る。メイン照合は区分(category)でも
+// 一致とみなす（scheduler.py と同じく code / category の二本立て）。
+function categoryOfCode(shiftCode: string | null): string | null {
+  if (!shiftCode) return null
+  return ruleStore.patterns.find((p) => p.code === shiftCode)?.category ?? null
 }
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
@@ -160,7 +169,12 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   )
   if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false }
 
-  const mainMismatch = !!mainType && matches.some((a) => a.shift_type !== mainType)
+  // code そのもの、または区分(category)が main_shift_type と一致すればメイン扱い。
+  const mainMismatch =
+    !!mainType &&
+    matches.some(
+      (a) => a.shift_type !== mainType && categoryOfCode(a.shift_type) !== mainType,
+    )
   return {
     label: matches.map((a) => timeRange(a)).join(', '),
     mainMismatch,

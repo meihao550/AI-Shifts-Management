@@ -10,13 +10,20 @@ const auth = useAuthStore()
 
 const showHeader = computed(() => route.meta.hideHeader !== true && auth.isAuthenticated)
 
+const themeOverrides = {
+  common: {
+    fontFamily:
+      "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif",
+  },
+}
+
 onMounted(async () => {
   await auth.restore()
 })
 </script>
 
 <template>
-  <n-config-provider :locale="jaJP" :date-locale="dateJaJP">
+  <n-config-provider :theme-overrides="themeOverrides" :locale="jaJP" :date-locale="dateJaJP">
     <n-message-provider>
       <n-notification-provider>
         <div class="app-shell">
@@ -38,8 +45,9 @@ onMounted(async () => {
 body {
   margin: 0;
   font-family:
+    'M PLUS Rounded 1c',
     'Hiragino Kaku Gothic ProN',
-    'Noto Sans JP',
+    'Noto Sans',
     system-ui,
     sans-serif;
   background: #f6f7fb;

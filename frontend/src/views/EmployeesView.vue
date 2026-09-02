@@ -35,7 +35,6 @@ const shiftOptions = [
 const columns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
-  { title: 'Email', key: 'email' },
   { title: '有給', key: 'paid_leave_amount', render: (r)=> `¥${r.paid_leave_amount}`},
   { title: '年齢', key: 'age', width: 80 },
   { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
@@ -52,7 +51,7 @@ const columns: DataTableColumns<Employee> = [
     title: 'ピン',
     key: 'main_shift_pinned',
     width: 60,
-    render: (r) => (r.main_shift_pinned ? '📌' : ''),
+    render: (r) => (r.main_shift_pinned ? '○' : ''),
   },
   {
     title: 'Wワーク',
