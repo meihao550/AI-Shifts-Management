@@ -30,6 +30,7 @@ class EmployeeUpdate(BaseModel):
     age: int | None = Field(default=None, ge=15, le=99)
     transport_cost: int | None = Field(default=None, ge=0)
     hourly_wage: int | None = Field(default=None, ge=0)
+    paid_leave_amount: int | None = Field(default=None, ge=0)
     main_shift_type: str | None = None
     main_shift_pinned: bool | None = None
     is_dual_worker: bool | None = None
