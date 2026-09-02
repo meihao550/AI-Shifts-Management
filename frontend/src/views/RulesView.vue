@@ -35,14 +35,12 @@ function toTimeString(ms: number | null): string {
 }
 
 const patternColumns: DataTableColumns<ShiftPattern> = [
-  { title: 'コード', key: 'code' },
   { title: '表示名', key: 'label' },
   { title: '開始', key: 'start_time' },
   { title: '終了', key: 'end_time' },
-  { title: '区分', key: 'category' },
-  { title: '基本', key: 'is_basic', render: (r) => (r.is_basic ? '○' : 'Wワーク') },
+  { title: 'シフトの扱い', key: 'is_basic', render: (r) => (r.is_basic ? '基本' : 'Wワーク') },
   {
-    title: '操作',
+    title: 'シフトパターンの削除',
     key: 'ops',
     render: (row) =>
       h(
@@ -152,7 +150,7 @@ onMounted(async () => {
   <NSpace vertical>
     <NCard title="シフトパターン">
       <template #header-extra>
-        <NButton type="primary" @click="showPattern = true">＋ パターン追加</NButton>
+        <NButton type="primary" @click="showPattern = true">パターン追加</NButton>
       </template>
       <p style="margin-top: 0; color: #6b7080">
         基本パターン(朝/夜/深夜)に加え、Wワーク向けの不定時刻パターンもここから追加できます
