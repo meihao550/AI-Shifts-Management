@@ -46,6 +46,7 @@ export interface ShiftPattern {
   end_time: string
   is_basic: boolean
   category: string
+  rest_minutes: number
 }
 
 export type DayCategory = 'weekday' | 'weekend_or_holiday'
@@ -70,6 +71,7 @@ export interface ShiftAssignment {
   start_time: string
   end_time: string
   crosses_midnight: boolean
+  rest_minutes: number
 }
 
 export interface Shift {
@@ -85,6 +87,7 @@ export interface PayrollRow {
   employee_id: number
   employee_name: string
   total_hours: number
+  worked_hours: number
   overnight_hours: number
   base_wage: number
   overnight_premium: number
@@ -107,6 +110,7 @@ export interface PayrollReport {
   rows: PayrollRow[]
   per_day: PayrollDay[]
   monthly_total: number
+  warnings: string[]
 }
 
 export interface GenerateShiftResult {

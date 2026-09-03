@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from app.services.payroll import calculate_payroll
 
 
-def _make_assignment(emp_id, d, start, end, crosses=False):
+def _make_assignment(emp_id, d, start, end, crosses=False, rest=0):
     return SimpleNamespace(
         employee_id=emp_id,
         target_date=date.fromisoformat(d),
@@ -12,6 +12,7 @@ def _make_assignment(emp_id, d, start, end, crosses=False):
         start_time=time.fromisoformat(start),
         end_time=time.fromisoformat(end),
         crosses_midnight=crosses,
+        rest_minutes=rest,
     )
 
 
@@ -31,8 +32,32 @@ def test_calculate_payroll_basic_shift():
     report = calculate_payroll(2025, 6, [a], {1: emp})
     row = report.rows[0]
     assert row.total_hours == 8.0
+    assert row.worked_hours == 8.0  # 休憩0なので実働=総スパン
     assert row.overnight_hours == 0.0
     assert row.base_wage == 8 * 1200
+
+
+def test_break_reduces_worked_hours_and_wage():
+    # 9:00-17:00（拘束8h）で休憩60分 → 実働7h。賃金は実働ベース。総スパンは8hのまま。
+    emp = _make_employee(1, "田中")
+    a = _make_assignment(1, "2025-06-02", "09:00", "17:00", rest=60)
+    report = calculate_payroll(2025, 6, [a], {1: emp})
+    row = report.rows[0]
+    assert row.total_hours == 8.0
+    assert row.worked_hours == 7.0
+    assert row.base_wage == 7 * 1200
+    assert report.warnings == []
+
+
+def test_break_over_span_clamps_to_zero_and_warns():
+    # 休憩が拘束時間を超える設定ミス → 実働0にクランプ + warning
+    emp = _make_employee(1, "田中")
+    a = _make_assignment(1, "2025-06-02", "09:00", "11:00", rest=180)
+    report = calculate_payroll(2025, 6, [a], {1: emp})
+    row = report.rows[0]
+    assert row.worked_hours == 0.0
+    assert row.base_wage == 0
+    assert len(report.warnings) == 1
     assert row.overnight_premium == 0
     assert row.insurance_status == "none"
 

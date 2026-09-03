@@ -9,7 +9,8 @@ InsuranceStatus = Literal["social", "employment", "none"]
 class PayrollRow(BaseModel):
     employee_id: int
     employee_name: str
-    total_hours: float
+    total_hours: float  # 総スパン（休憩を引かない拘束時間）
+    worked_hours: float  # 実働時間（総スパン − 休憩）。賃金・保険判定の基礎
     overnight_hours: float
     base_wage: int
     overnight_premium: int
@@ -32,3 +33,4 @@ class PayrollReport(BaseModel):
     rows: list[PayrollRow]
     per_day: list[PayrollDay]
     monthly_total: int
+    warnings: list[str] = []

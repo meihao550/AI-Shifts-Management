@@ -13,6 +13,8 @@ class ShiftAssignmentBase(BaseModel):
     start_time: time
     end_time: time
     crosses_midnight: bool = False
+    # 休憩(分)。手動編集(PUT)ではサーバがパターンから解決するため入力値は無視される。
+    rest_minutes: int = 0
 
 
 class ShiftAssignmentCreate(ShiftAssignmentBase):

@@ -92,6 +92,7 @@ def calculate_payroll(
         paid_leave_dates_by_emp[emp_id].append(d)
 
     rows: list[PayrollRow] = []
+    warnings: list[str] = []
     per_day_totals: dict[date, dict[str, int]] = defaultdict(lambda: {"total_cost": 0, "headcount": 0})
 
     # 割当のある従業員だけでなく、渡された全従業員を集計する。
@@ -99,25 +100,36 @@ def calculate_payroll(
     for emp_id, emp in sorted(employees_by_id.items()):
         emp_assignments = by_emp.get(emp_id, [])
 
-        total_hours = 0.0
+        total_hours = 0.0  # 総スパン（拘束時間）
+        worked_hours = 0.0  # 実働（総スパン − 休憩）。賃金・保険の基礎（ADR 0001）
         overnight_hours = 0.0
 
         for a in emp_assignments:
             start, end = _assignment_intervals(a)
-            hours = (end - start).total_seconds() / 3600.0
-            total_hours += hours
+            span = (end - start).total_seconds() / 3600.0
+            rest = (a.rest_minutes or 0) / 60.0
+            if rest > span:
+                # 設定ミス（休憩が拘束時間を超える）。実働は 0 にクランプし警告する。
+                warnings.append(
+                    f"{emp.name} {a.target_date.isoformat()}: 休憩({a.rest_minutes}分)が"
+                    f"勤務時間({span:.1f}h)を超えています。実働を0として計算しました。"
+                )
+            worked = max(0.0, span - rest)
+            total_hours += span
+            worked_hours += worked
+            # 深夜割増は総スパンの深夜帯に対して計算する（休憩は昼間仮定・ADR 0001）
             overnight_hours += _overnight_hours(start, end)
 
             # daily cost (base only, without insurance) - approximation for per-day view
-            day_cost = int(hours * emp.hourly_wage)
+            day_cost = int(worked * emp.hourly_wage)
             night_cost = int(_overnight_hours(start, end) * emp.hourly_wage * OVERNIGHT_PREMIUM_RATE)
             per_day_totals[a.target_date]["total_cost"] += day_cost + night_cost + emp.transport_cost
             per_day_totals[a.target_date]["headcount"] += 1
 
-        base_wage = int(total_hours * emp.hourly_wage)
+        base_wage = int(worked_hours * emp.hourly_wage)
         overnight_premium = int(overnight_hours * emp.hourly_wage * OVERNIGHT_PREMIUM_RATE)
         transport_cost_total = emp.transport_cost * len(emp_assignments)
-        insurance = _classify_insurance(total_hours)
+        insurance = _classify_insurance(worked_hours)
 
         # 有給: 日数 × 有給1日あたりの金額（勤務時間・保険判定には影響しない）
         paid_leave_dates = paid_leave_dates_by_emp.get(emp_id, [])
@@ -132,6 +144,7 @@ def calculate_payroll(
                 employee_id=emp.id,
                 employee_name=emp.name,
                 total_hours=round(total_hours, 2),
+                worked_hours=round(worked_hours, 2),
                 overnight_hours=round(overnight_hours, 2),
                 base_wage=base_wage,
                 overnight_premium=overnight_premium,
@@ -158,4 +171,5 @@ def calculate_payroll(
         rows=sorted(rows, key=lambda r: r.employee_id),
         per_day=per_day,
         monthly_total=sum(r.grand_total for r in rows),
+        warnings=warnings,
     )
