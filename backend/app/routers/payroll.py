@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth.deps import CurrentUser
 from app.core.database import get_db
 from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
+from app.models.rule import ShiftPattern
 from app.models.shift import Shift
 from app.schemas.payroll import PayrollReport
 from app.services.payroll import calculate_payroll
@@ -48,6 +49,13 @@ def get_payroll(
     ).all()
     paid_leave_records = [(r.employee_id, r.target_date) for r in paid_leave_rows]
 
+    # 休憩は「現在のパターン」を計算時に都度参照する（shift_type=code → rest_minutes）。
+    # これにより、パターンの休憩を変えれば再計算するだけで人件費に反映される（ADR 0001）。
+    rest_by_code = {
+        row.code: row.rest_minutes
+        for row in db.execute(select(ShiftPattern.code, ShiftPattern.rest_minutes)).all()
+    }
+
     return calculate_payroll(
-        year, month, shift.assignments, employees_by_id, paid_leave_records
+        year, month, shift.assignments, employees_by_id, paid_leave_records, rest_by_code
     )

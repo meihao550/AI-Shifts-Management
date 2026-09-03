@@ -39,6 +39,8 @@ class ShiftPattern(Base):
     is_basic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # morning/evening/night: high-level bucket used for staffing constraints
     category: Mapped[str] = mapped_column(String(16), nullable=False)
+    # 休憩時間（分）。労働時間・給与計算での控除に使う想定。0=休憩なし。
+    rest_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class HourlyStaffingRule(Base):

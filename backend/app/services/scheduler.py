@@ -53,6 +53,7 @@ class PatternSpec:
     end: time  # 終了時刻
     category: str  # morning|evening|night
     is_basic: bool  # 基本パターンかどうか
+    rest_minutes: int = 0  # 休憩(分)。割当へスナップショットする
 
 
 @dataclass(frozen=True)
@@ -424,6 +425,7 @@ class ShiftScheduler:
                                     "start_time": p.start,
                                     "end_time": p.end,
                                     "crosses_midnight": crosses,
+                                    "rest_minutes": p.rest_minutes,
                                 }
                             )
             if use_slack:

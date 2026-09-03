@@ -128,6 +128,7 @@ function hourLabel(t: string): string {
 }
 
 // 割当を実時間帯で表示する（例 20:00-00:00 → "20 - 0"）。深夜跨ぎもそのまま表示。
+// 休憩・実働はここには出さない（人件費画面で確認する）。
 function timeRange(a: ShiftAssignment): string {
   return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
 }
@@ -300,6 +301,7 @@ async function saveCellEdit() {
             start_time: p.start_time,
             end_time: p.end_time,
             crosses_midnight: p.end_time <= p.start_time,
+            rest_minutes: p.rest_minutes, // パターンの休憩をスナップショット
           })
         }
       }
@@ -321,6 +323,8 @@ async function saveShift() {
       start_time: a.start_time,
       end_time: a.end_time,
       crosses_midnight: a.crosses_midnight,
+      // 送っても backend がパターンから解決して上書きする（型を満たすため付与）
+      rest_minutes: a.rest_minutes,
     }))
     await shiftStore.saveAssignments(shift.value.id, payload)
     dirty.value = false

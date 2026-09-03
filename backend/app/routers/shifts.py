@@ -153,6 +153,7 @@ async def generate_shift(
                 end=p.end_time,
                 category=p.category,
                 is_basic=p.is_basic,
+                rest_minutes=p.rest_minutes,
             )
             for p in patterns
         ],
@@ -207,8 +208,20 @@ def replace_assignments(
     shift = db.get(Shift, shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="shift not found")
+    # 休憩は shift_type(=パターンcode)からパターンの rest_minutes を引いて焼き込む
+    # （パターンが唯一の真実源。クライアント送信値は使わない。ADR 0001 参照）。
+    rest_by_code = {
+        row.code: row.rest_minutes
+        for row in db.execute(
+            select(ShiftPattern.code, ShiftPattern.rest_minutes)
+        ).all()
+    }
     db.query(ShiftAssignment).filter(ShiftAssignment.shift_id == shift_id).delete()
-    rows = [ShiftAssignment(shift_id=shift_id, **a.model_dump()) for a in assignments]
+    rows = []
+    for a in assignments:
+        data = a.model_dump()
+        data["rest_minutes"] = rest_by_code.get(a.shift_type, 0)
+        rows.append(ShiftAssignment(shift_id=shift_id, **data))
     db.add_all(rows)
     db.commit()
     for r in rows:

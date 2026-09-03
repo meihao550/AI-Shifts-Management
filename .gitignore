@@ -59,3 +59,4 @@ service-account*.json
 
 # Claude
 .claude/settings.local.json
+.claude/skills/.gitignore

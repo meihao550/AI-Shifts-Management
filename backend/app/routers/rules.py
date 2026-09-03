@@ -14,6 +14,7 @@ from app.schemas.rule import (
     HourlyStaffingRuleRead,
     ShiftPatternCreate,
     ShiftPatternRead,
+    ShiftPatternUpdate,
 )
 from app.services.staffing import infer_category, make_pattern_code, make_pattern_label
 
@@ -46,8 +47,50 @@ def create_pattern(
         end_time=payload.end_time,
         is_basic=False,
         category=infer_category(payload.start_time, payload.end_time),
+        rest_minutes=payload.rest_minutes,
     )
     db.add(pat)
+    db.commit()
+    db.refresh(pat)
+    return pat
+
+
+@router.patch("/patterns/{pattern_id}", response_model=ShiftPatternRead)
+def update_pattern(
+    pattern_id: int,
+    payload: ShiftPatternUpdate,
+    _admin: AdminUser,
+    db: Annotated[Session, Depends(get_db)],
+):
+    pat = db.get(ShiftPattern, pattern_id)
+    if not pat:
+        raise HTTPException(status_code=404, detail="pattern not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "label" in updates and updates["label"]:
+        pat.label = updates["label"]
+    if "rest_minutes" in updates and updates["rest_minutes"] is not None:
+        pat.rest_minutes = updates["rest_minutes"]
+
+    # 開始/終了を変えたらコード・区分を再生成する（コードは時刻から自動導出のため）。
+    new_start = updates.get("start_time") or pat.start_time
+    new_end = updates.get("end_time") or pat.end_time
+    if new_start != pat.start_time or new_end != pat.end_time:
+        new_code = make_pattern_code(new_start, new_end)
+        conflict = db.execute(
+            select(ShiftPattern).where(
+                ShiftPattern.code == new_code, ShiftPattern.id != pattern_id
+            )
+        ).scalar_one_or_none()
+        if conflict:
+            raise HTTPException(
+                status_code=409, detail="同じ時間帯のパターンが既に存在します"
+            )
+        pat.start_time = new_start
+        pat.end_time = new_end
+        pat.code = new_code
+        pat.category = infer_category(new_start, new_end)
+
     db.commit()
     db.refresh(pat)
     return pat

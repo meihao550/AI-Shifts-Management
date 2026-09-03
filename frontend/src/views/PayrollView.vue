@@ -29,7 +29,8 @@ const payroll = computed(() => store.payroll)
 
 const rowColumns: DataTableColumns<PayrollRow> = [
   { title: '従業員', key: 'employee_name' },
-  { title: '総時間', key: 'total_hours', render: (r) => `${r.total_hours} h` },
+  { title: '拘束時間', key: 'total_hours', render: (r) => `${r.total_hours} h` },
+  { title: '実働時間', key: 'worked_hours', render: (r) => `${r.worked_hours} h` },
   { title: '深夜時間', key: 'overnight_hours', render: (r) => `${r.overnight_hours} h` },
   { title: '基本賃金', key: 'base_wage', render: (r) => `¥${r.base_wage.toLocaleString()}` },
   {
@@ -80,6 +81,12 @@ const dayColumns: DataTableColumns<PayrollDay> = [
 
     <NAlert v-if="!payroll" type="warning">
       対象月のシフトが存在しないか、まだ計算されていません。
+    </NAlert>
+
+    <NAlert v-if="payroll && payroll.warnings.length" type="error" title="要確認">
+      <ul style="margin: 0; padding-left: 18px">
+        <li v-for="(w, i) in payroll.warnings" :key="i">{{ w }}</li>
+      </ul>
     </NAlert>
 
     <NCard v-if="payroll" title="サマリ">

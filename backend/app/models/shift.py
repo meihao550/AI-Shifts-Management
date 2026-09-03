@@ -85,6 +85,8 @@ class ShiftAssignment(Base):
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     # end_time が start_time より小さい場合、翌日にまたぐ夜勤
     crosses_midnight: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # 休憩(分)。割当生成/編集時にパターンから焼き込むスナップショット。実働時間の算出に使う。
+    rest_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     shift: Mapped[Shift] = relationship("Shift", back_populates="assignments")
     employee: Mapped[Employee] = relationship(  # noqa: F821

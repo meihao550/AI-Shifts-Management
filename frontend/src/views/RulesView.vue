@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import {
   NButton,
   NCard,
@@ -20,11 +20,13 @@ const store = useRuleStore()
 const message = useMessage()
 
 const showPattern = ref(false)
+const editingId = ref<number | null>(null)
 const patternForm = ref<{
   label: string
   start_time: number | null
   end_time: number | null
-}>({ label: '', start_time: null, end_time: null })
+  rest_minutes: number
+}>({ label: '', start_time: null, end_time: null, rest_minutes: 0 })
 
 function toTimeString(ms: number | null): string {
   if (ms == null) return '09:00:00'
@@ -34,43 +36,99 @@ function toTimeString(ms: number | null): string {
   return `${hh}:${mm}:00`
 }
 
+// "HH:MM:SS" → NTimePicker 用のミリ秒値（当日の同時刻）
+function toMs(t: string): number {
+  const [hh, mm] = t.split(':')
+  const d = new Date()
+  d.setHours(Number(hh), Number(mm), 0, 0)
+  return d.getTime()
+}
+
+// 休憩は「1時間刻み」で入力する（DB は分保持なので時間⇔分を変換）。
+const restHours = computed({
+  get: () => patternForm.value.rest_minutes / 60,
+  set: (v) => {
+    patternForm.value.rest_minutes = Math.max(0, Math.round((v ?? 0) * 60))
+  },
+})
+
+function openAdd() {
+  editingId.value = null
+  patternForm.value = { label: '', start_time: null, end_time: null, rest_minutes: 0 }
+  showPattern.value = true
+}
+
+function openEdit(row: ShiftPattern) {
+  editingId.value = row.id
+  patternForm.value = {
+    label: row.label,
+    start_time: toMs(row.start_time),
+    end_time: toMs(row.end_time),
+    rest_minutes: row.rest_minutes,
+  }
+  showPattern.value = true
+}
+
 const patternColumns: DataTableColumns<ShiftPattern> = [
   { title: '表示名', key: 'label' },
   { title: '開始', key: 'start_time' },
   { title: '終了', key: 'end_time' },
+  { title: '休憩', key: 'rest_minutes', render: (r) => `${r.rest_minutes / 60}時間` },
   { title: 'シフトの扱い', key: 'is_basic', render: (r) => (r.is_basic ? '基本' : 'Wワーク') },
   {
-    title: 'シフトパターンの削除',
+    title: '操作',
     key: 'ops',
     render: (row) =>
-      h(
-        NPopconfirm,
-        { onPositiveClick: () => deletePattern(row.id) },
-        {
-          default: () => '削除しますか？',
-          trigger: () =>
-            h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
-        },
-      ),
+      h(NSpace, { size: 'small' }, () => [
+        h(
+          NButton,
+          { size: 'small', ghost: true, onClick: () => openEdit(row) },
+          () => '編集',
+        ),
+        h(
+          NPopconfirm,
+          { onPositiveClick: () => deletePattern(row.id) },
+          {
+            default: () => '削除しますか？',
+            trigger: () =>
+              h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
+          },
+        ),
+      ]),
   },
 ]
 
-async function addPattern() {
+async function savePattern() {
   if (patternForm.value.start_time == null || patternForm.value.end_time == null) {
     message.warning('開始・終了時刻を入力してください')
     return
   }
+  // 休憩 ≥ 勤務スパン は不正（実働が0以下になる）。保存を止めて赤字で知らせる。
+  const s = new Date(patternForm.value.start_time)
+  const e = new Date(patternForm.value.end_time)
+  let spanMin = e.getHours() * 60 + e.getMinutes() - (s.getHours() * 60 + s.getMinutes())
+  if (spanMin <= 0) spanMin += 24 * 60 // 深夜跨ぎ
+  if (patternForm.value.rest_minutes >= spanMin) {
+    message.error('休憩が勤務時間を超えています。休憩を短くしてください')
+    return
+  }
+  const payload = {
+    start_time: toTimeString(patternForm.value.start_time),
+    end_time: toTimeString(patternForm.value.end_time),
+    label: patternForm.value.label || undefined,
+    rest_minutes: patternForm.value.rest_minutes,
+  }
   try {
-    await store.createPattern({
-      start_time: toTimeString(patternForm.value.start_time),
-      end_time: toTimeString(patternForm.value.end_time),
-      label: patternForm.value.label || undefined,
-    })
-    message.success('追加しました')
+    if (editingId.value != null) {
+      await store.updatePattern(editingId.value, payload)
+      message.success('更新しました')
+    } else {
+      await store.createPattern(payload)
+      message.success('追加しました')
+    }
     showPattern.value = false
-    patternForm.value = { label: '', start_time: null, end_time: null }
   } catch (e) {
-    message.error(`追加失敗: ${(e as Error).message}`)
+    message.error(`保存失敗: ${(e as Error).message}`)
   }
 }
 
@@ -150,12 +208,13 @@ onMounted(async () => {
   <NSpace vertical>
     <NCard title="シフトパターン">
       <template #header-extra>
-        <NButton type="primary" @click="showPattern = true">パターン追加</NButton>
+        <NButton type="primary" @click="openAdd">パターン追加</NButton>
       </template>
       <p style="margin-top: 0; color: #6b7080">
         基本パターン(朝/夜/深夜)に加え、Wワーク向けの不定時刻パターンもここから追加できます
         (「基本パターン」を OFF にすると Wワーク扱い)。
       </p>
+      <!-- シフトパターンの表の作成 -->
       <NDataTable :columns="patternColumns" :data="store.patterns" />
     </NCard>
 
@@ -192,13 +251,13 @@ onMounted(async () => {
     <NModal
       v-model:show="showPattern"
       preset="card"
-      title="シフトパターン追加（時刻のみ）"
+      :title="editingId == null ? 'シフトパターン追加' : 'シフトパターン編集'"
       style="width: 420px"
     >
       <NSpace vertical>
         <p style="margin: 0; color: #6b7080; font-size: 12px">
-          開始・終了時刻だけ入力してください。表示名・区分は自動で決まります。
-          追加したパターンはWワーク向け（掛け持ち従業員のみ配置可）として登録されます。
+          開始・終了時刻と休憩を入力してください。表示名・区分は自動で決まります（表示名は任意）。
+          新規追加したパターンはWワーク向け（掛け持ち従業員のみ配置可）として登録されます。
         </p>
         <NSpace align="center">
           <span>開始</span>
@@ -206,8 +265,16 @@ onMounted(async () => {
           <span>終了</span>
           <NTimePicker v-model:value="patternForm.end_time" format="HH:mm" placeholder="終了時刻" />
         </NSpace>
+        <NSpace align="center">
+          <span>休憩</span>
+          <NInputNumber v-model:value="restHours" :min="0" :step="1" style="width: 140px">
+            <template #suffix>時間</template>
+          </NInputNumber>
+        </NSpace>
         <NInput v-model:value="patternForm.label" placeholder="表示名（任意・未入力なら自動）" />
-        <NButton type="primary" block @click="addPattern">追加</NButton>
+        <NButton type="primary" block @click="savePattern">
+          {{ editingId == null ? '追加' : '更新' }}
+        </NButton>
       </NSpace>
     </NModal>
   </NSpace>
