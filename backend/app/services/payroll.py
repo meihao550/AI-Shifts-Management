@@ -81,7 +81,15 @@ def calculate_payroll(
     assignments: Iterable[ShiftAssignment],
     employees_by_id: dict[int, Employee],
     paid_leave_records: Iterable[tuple[int, date]] | None = None,
+    rest_by_code: dict[str, int] | None = None,
 ) -> PayrollReport:
+    # 休憩は「現在のパターン」を優先し、該当パターンが無ければ割当のスナップショットを使う。
+    # これで再計算のたびに最新のパターン休憩が反映される（ADR 0001）。
+    rest_by_code = rest_by_code or {}
+
+    def _rest_minutes(a: ShiftAssignment) -> int:
+        return rest_by_code.get(a.shift_type, a.rest_minutes or 0)
+
     by_emp: dict[int, list[ShiftAssignment]] = defaultdict(list)
     for a in assignments:
         by_emp[a.employee_id].append(a)
@@ -107,11 +115,12 @@ def calculate_payroll(
         for a in emp_assignments:
             start, end = _assignment_intervals(a)
             span = (end - start).total_seconds() / 3600.0
-            rest = (a.rest_minutes or 0) / 60.0
+            rest_min = _rest_minutes(a)
+            rest = rest_min / 60.0
             if rest > span:
                 # 設定ミス（休憩が拘束時間を超える）。実働は 0 にクランプし警告する。
                 warnings.append(
-                    f"{emp.name} {a.target_date.isoformat()}: 休憩({a.rest_minutes}分)が"
+                    f"{emp.name} {a.target_date.isoformat()}: 休憩({rest_min}分)が"
                     f"勤務時間({span:.1f}h)を超えています。実働を0として計算しました。"
                 )
             worked = max(0.0, span - rest)

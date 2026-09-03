@@ -49,6 +49,19 @@ def test_break_reduces_worked_hours_and_wage():
     assert report.warnings == []
 
 
+def test_current_pattern_break_overrides_snapshot():
+    # 割当のスナップショットは60分だが、現在のパターン(shift_type=code)が120分なら120分を使う。
+    # → 再計算するだけで最新のパターン休憩が人件費に反映される（ADR 0001）。
+    emp = _make_employee(1, "田中")
+    a = _make_assignment(1, "2025-06-02", "09:00", "17:00", rest=60)
+    a.shift_type = "morning"
+    report = calculate_payroll(2025, 6, [a], {1: emp}, rest_by_code={"morning": 120})
+    row = report.rows[0]
+    assert row.total_hours == 8.0
+    assert row.worked_hours == 6.0  # 8 - 120/60
+    assert row.base_wage == 6 * 1200
+
+
 def test_break_over_span_clamps_to_zero_and_warns():
     # 休憩が拘束時間を超える設定ミス → 実働0にクランプ + warning
     emp = _make_employee(1, "田中")

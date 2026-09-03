@@ -127,25 +127,10 @@ function hourLabel(t: string): string {
   return mm === '00' ? `${hour}` : `${hour}:${mm}`
 }
 
-// 割当の拘束時間(総スパン, h)。深夜跨ぎ(終了≤開始)は翌日扱いで +24h。
-function spanHours(a: ShiftAssignment): number {
-  const [sh, sm] = a.start_time.split(':').map(Number)
-  const [eh, em] = a.end_time.split(':').map(Number)
-  let mins = eh * 60 + em - (sh * 60 + sm)
-  if (mins <= 0) mins += 24 * 60
-  return mins / 60
-}
-
-// 実働時間 = 総スパン − 休憩。0未満はクランプ（backend と同じ規約・ADR 0001）。
-function workedHours(a: ShiftAssignment): number {
-  return Math.max(0, spanHours(a) - (a.rest_minutes ?? 0) / 60)
-}
-
-// セル表示: 実時間帯 + 実働(休憩がある場合のみ拘束と区別できるよう併記)。
-// 例 20:00-00:00/休憩0 → "20 - 0"、9-17/休憩60 → "9 - 17 (実働7h)"。
+// 割当を実時間帯で表示する（例 20:00-00:00 → "20 - 0"）。深夜跨ぎもそのまま表示。
+// 休憩・実働はここには出さない（人件費画面で確認する）。
 function timeRange(a: ShiftAssignment): string {
-  const base = `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
-  return a.rest_minutes > 0 ? `${base} (実働${workedHours(a)}h)` : base
+  return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
 }
 
 function isoLocalDate(d: Date): string {
