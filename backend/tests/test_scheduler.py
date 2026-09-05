@@ -281,3 +281,36 @@ def test_staffing_shortage_recommends_hiring():
         employees=[_employee(1, "A")],  # 1 人だけ
     ).solve()
     assert any("採用" in w for w in result.warnings)
+
+
+# ---- 「普段入れる時間帯」ハード制約 ---------------------------------------------
+
+
+def test_window_hours_helper():
+    from app.services.scheduler import _window_hours
+
+    assert _window_hours(9, 22) == set(range(9, 22))
+    # 翌日跨ぎ: 18-2 -> 18..25
+    assert _window_hours(18, 2) == set(range(18, 26))
+
+
+def test_available_window_blocks_out_of_window_pattern():
+    """窓 9-17 の従業員は、窓に収まらない夜勤(17-1)には配置されない。"""
+    emp = EmployeeSpec(
+        id=1,
+        name="A",
+        weekly_target=7,
+        main_shift_type=None,
+        hourly_wage=1000,
+        available_start=9,
+        available_end=17,
+    )
+    result = _make_scheduler(
+        patterns=[MORNING, EVENING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),  # 朝だけ必要
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # 夜勤(窓外)は一切割り当てられない。朝(窓内)には入る。
+    assert all(a["shift_type"] != "evening" for a in result.assignments)
+    assert any(a["shift_type"] == "morning" for a in result.assignments)

@@ -50,6 +50,11 @@ class Employee(Base):
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     # 有給
     paid_leave_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。
+    # 終了 <= 開始 は翌日跨ぎ扱い（例 18-2 = 18:00〜翌2:00）。この窓に完全に収まる
+    # パターンのみ生成時に配置する（ハード制約）。
+    available_start_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    available_end_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
     role: Mapped[EmployeeRole] = mapped_column(
         SAEnum(EmployeeRole, name="employee_role"),
         default=EmployeeRole.employee,

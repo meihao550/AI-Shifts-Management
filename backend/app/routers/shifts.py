@@ -141,6 +141,8 @@ async def generate_shift(
                 hourly_wage=e.hourly_wage,
                 main_shift_pinned=e.main_shift_pinned,
                 is_dual_worker=e.is_dual_worker,
+                available_start=e.available_start_hour,
+                available_end=e.available_end_hour,
             )
             for e in employees
         ],
