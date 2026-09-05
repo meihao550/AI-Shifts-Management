@@ -18,6 +18,9 @@ class EmployeeBase(BaseModel):
     role: EmployeeRole = EmployeeRole.employee
     active: bool = True
     paid_leave_amount: int = Field(default=0, ge=0)
+    # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。
+    available_start_hour: int | None = Field(default=None, ge=0, le=24)
+    available_end_hour: int | None = Field(default=None, ge=0, le=24)
 
 
 class EmployeeCreate(EmployeeBase):
@@ -37,6 +40,8 @@ class EmployeeUpdate(BaseModel):
     weekly_shifts: int | None = Field(default=None, ge=0, le=7)
     role: EmployeeRole | None = None
     active: bool | None = None
+    available_start_hour: int | None = Field(default=None, ge=0, le=24)
+    available_end_hour: int | None = Field(default=None, ge=0, le=24)
 
 
 class EmployeeRead(EmployeeBase):

@@ -1,0 +1,103 @@
+/* =====================================================================
+   Duty Board — design tokens
+   題材=シフト勤務表。時間帯(朝/夕/深夜)を機能的な色言語にし、
+   月間格子を主役に。数字はタブラー数字で整列。控えめなクローム。
+   ===================================================================== */
+:root {
+  /* --- surfaces / ink --- */
+  --paper: #edefea; /* 作業台の紙色（背景） */
+  --panel: #faf9f3; /* 盤面パネル */
+  --panel-strip: #eef0e8; /* パネル見出し帯・表ヘッダ */
+  --ink: #191c18; /* 主テキスト */
+  --ink-2: #565a51; /* 副テキスト */
+  --ink-3: #868a7e; /* 補助テキスト */
+  --line: #d6d8ce; /* 罫線 */
+  --line-2: #c2c5b8; /* 強い罫線 */
+  --grid: rgba(28, 32, 24, 0.045); /* 背景の方眼 */
+
+  /* --- primary (chrome の唯一のアクセント = 藍) --- */
+  --indigo: #3b4e8c;
+  --indigo-600: #33447c;
+  --indigo-700: #2a3a6a;
+  --indigo-050: #e0e4f1;
+
+  /* --- 時間帯バンド（意味を持つ機能色）--- */
+  --morning: #cf8f2b;
+  --morning-bg: #f6e7c5;
+  --morning-ink: #6f4c0d;
+  --evening: #bb4d73;
+  --evening-bg: #f1d7e0;
+  --evening-ink: #86294d;
+  --night: #3b4e8c;
+  --night-bg: #dae0f0;
+  --night-ink: #293869;
+
+  /* --- status --- */
+  --danger: #b23a3a;
+  --danger-bg: #f4dcda;
+  --warn: #b9791f;
+  --warn-bg: #f6e6c8;
+  --ok: #3c7a60;
+  --ok-bg: #d8e9e0;
+
+  /* --- shape --- */
+  --r-panel: 10px;
+  --r-chip: 4px;
+  --shadow-panel: 0 1px 2px rgba(25, 28, 24, 0.05), 0 1px 0 rgba(25, 28, 24, 0.03);
+
+  --page-max-width: 1440px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: 'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums; /* 時間・金額を縦に揃える */
+  -webkit-font-smoothing: antialiased;
+  /* 作業台の方眼を極薄で敷く（この題材の唯一の背景テクスチャ） */
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center top;
+}
+
+/* 数字を主役にする表示用ユーティリティ */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.stat-number {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.eyebrow {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* アクセシビリティ床: フォーカス可視・モーション尊重 */
+:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

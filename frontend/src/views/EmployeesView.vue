@@ -32,6 +32,14 @@ const shiftOptions = [
   { label: '深夜', value: 'night' },
 ]
 
+// 普段入れる時間帯（1時間刻み, 0〜24）。0:00〜24:00 を選択肢に。
+const hourOptions = Array.from({ length: 25 }, (_, h) => ({ label: `${h}:00`, value: h }))
+
+function windowLabel(e: Employee): string {
+  if (e.available_start_hour == null || e.available_end_hour == null) return '制限なし'
+  return `${e.available_start_hour}:00–${e.available_end_hour}:00`
+}
+
 const columns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
@@ -60,6 +68,12 @@ const columns: DataTableColumns<Employee> = [
     render: (r) => (r.is_dual_worker ? '○' : ''),
   },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
+  {
+    title: '普段の時間',
+    key: 'available_start_hour',
+    width: 120,
+    render: (r) => windowLabel(r),
+  },
   {
     title: 'ロール',
     key: 'role',
@@ -108,6 +122,8 @@ function openCreate() {
     weekly_shifts: 3,
     role: 'employee',
     active: true,
+    available_start_hour: null,
+    available_end_hour: null,
   }
   showEdit.value = true
 }
@@ -189,6 +205,28 @@ async function remove(id: number) {
         <NFormItem label="週勤務回数">
           <NInputNumber v-model:value="form.weekly_shifts" :min="0" :max="7" style="width: 100%" />
         </NFormItem>
+        <NFormItem label="普段入れる時間">
+          <NSpace align="center" :wrap="false" style="width: 100%">
+            <NSelect
+              v-model:value="form.available_start_hour"
+              :options="hourOptions"
+              clearable
+              placeholder="開始"
+              style="width: 120px"
+            />
+            <span>〜</span>
+            <NSelect
+              v-model:value="form.available_end_hour"
+              :options="hourOptions"
+              clearable
+              placeholder="終了"
+              style="width: 120px"
+            />
+          </NSpace>
+        </NFormItem>
+        <p style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
+          1時間刻み。空欄で制限なし。この時間内に収まるシフトにだけ生成配置します（終了が開始以前なら翌日扱い）。
+        </p>
         <NFormItem label="ロール">
           <NSelect
             v-model:value="form.role"

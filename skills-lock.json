@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "improve-codebase-architecture": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
+      "computedHash": "2449db6ab1ded9581f69fcc56c1f64818112d05e271fd4c5da23c6523f9d3d9d"
+    },
+    "oracle": {
+      "source": "openclaw/openclaw",
+      "sourceType": "github",
+      "skillPath": "skills/oracle/SKILL.md",
+      "computedHash": "dfdf2045a70cd5f4691f4b3cf82ce84a39d529de3f33ba5687832ec2d433a413"
+    },
+    "prototype": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/prototype/SKILL.md",
+      "computedHash": "d3fc74689bd993e39c44bfae510d014eecffbeec2922764b065377fd1327c0f6"
+    }
+  }
+}

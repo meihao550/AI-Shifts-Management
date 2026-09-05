@@ -36,10 +36,11 @@ function onMenu(key: string) {
 <template>
   <header class="header">
     <div class="header-inner">
-      <div class="brand">
-        <span class="logo">AI-Shifts</span>
-        <span class="pill">{{ currentTitle }}</span>
-      </div>
+      <RouterLink to="/dashboard" class="brand">
+        <span class="mark" aria-hidden="true">勤</span>
+        <span class="logo">シフト勤務表</span>
+        <span v-if="currentTitle" class="pill">{{ currentTitle }}</span>
+      </RouterLink>
       <nav class="nav">
         <RouterLink
           v-for="item in nav"
@@ -74,9 +75,18 @@ function onMenu(key: string) {
 
 <style scoped>
 .header {
-  background: #1e2a4a;
-  color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--panel);
+  color: var(--ink);
+  /* 時間帯(朝→夕→深夜)の細い帯を1本だけ下端に。この題材の署名的ディテール。 */
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(
+      90deg,
+      var(--morning) 0%,
+      var(--evening) 50%,
+      var(--night) 100%
+    )
+    1;
+  box-shadow: 0 1px 3px rgba(25, 28, 24, 0.06);
 }
 .header-inner {
   max-width: var(--page-max-width);
@@ -89,47 +99,65 @@ function onMenu(key: string) {
 }
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 220px;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--indigo);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
 }
 .logo {
   font-weight: 700;
   font-size: 18px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.02em;
 }
 .pill {
-  padding: 2px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12);
+  padding: 2px 9px;
+  border-radius: var(--r-chip);
+  background: var(--indigo-050);
+  color: var(--indigo-700);
   font-size: 12px;
+  font-weight: 600;
 }
 .nav {
   display: flex;
-  gap: 16px;
+  gap: 6px;
   flex: 1;
 }
 .nav-item {
-  color: rgba(255, 255, 255, 0.75);
+  position: relative;
+  color: var(--ink-2);
   text-decoration: none;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 6px;
   font-size: 14px;
+  font-weight: 500;
+  transition: color 0.12s, background 0.12s;
 }
 .nav-item:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  background: var(--panel-strip);
 }
 .nav-item.active {
-  color: #fff;
-  background: rgba(80, 160, 255, 0.25);
+  color: var(--indigo-700);
+  background: var(--indigo-050);
 }
 .user :deep(.n-button) {
-  color: #fff;
+  color: var(--ink);
 }
 .role {
   margin-left: 8px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--ink-3);
 }
 </style>

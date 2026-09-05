@@ -25,6 +25,9 @@ export interface Employee {
   weekly_shifts: number
   role: UserRole
   active: boolean
+  // 普段入れる時間帯（1時間単位, 0〜24）。両方 null なら制限なし。
+  available_start_hour: number | null
+  available_end_hour: number | null
 }
 
 export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'

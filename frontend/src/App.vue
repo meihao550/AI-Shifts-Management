@@ -10,11 +10,43 @@ const auth = useAuthStore()
 
 const showHeader = computed(() => route.meta.hideHeader !== true && auth.isAuthenticated)
 
+// naive-ui 全体を Duty Board パレットへ寄せる（表・ボタン・カードが自動追従）
 const themeOverrides = {
   common: {
     fontFamily:
       "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif",
+    primaryColor: '#3b4e8c',
+    primaryColorHover: '#33447c',
+    primaryColorPressed: '#2a3a6a',
+    primaryColorSuppl: '#33447c',
+    infoColor: '#3b4e8c',
+    infoColorHover: '#33447c',
+    successColor: '#3c7a60',
+    warningColor: '#b9791f',
+    errorColor: '#b23a3a',
+    textColorBase: '#191c18',
+    textColor1: '#191c18',
+    textColor2: '#3a3e36',
+    textColor3: '#787c71',
+    bodyColor: '#edefea',
+    cardColor: '#faf9f3',
+    modalColor: '#faf9f3',
+    popoverColor: '#faf9f3',
+    borderColor: '#d6d8ce',
+    borderRadius: '6px',
+    borderRadiusSmall: '4px',
+    fontWeightStrong: '700',
   },
+  Card: { borderRadius: '10px', color: '#faf9f3' },
+  DataTable: {
+    thColor: '#eef0e8',
+    thTextColor: '#3a3e36',
+    thFontWeight: '700',
+    tdColor: '#faf9f3',
+    borderColor: '#d6d8ce',
+    tdColorHover: '#f0f1ea',
+  },
+  Statistic: { labelFontSize: '13px' },
 }
 
 onMounted(async () => {
@@ -38,22 +70,7 @@ onMounted(async () => {
 </template>
 
 <style>
-:root {
-  --page-max-width: 1400px;
-}
-
-body {
-  margin: 0;
-  font-family:
-    'M PLUS Rounded 1c',
-    'Hiragino Kaku Gothic ProN',
-    'Noto Sans',
-    system-ui,
-    sans-serif;
-  background: #f6f7fb;
-  color: #202226;
-}
-
+/* 基盤(body/背景/フォント)は styles/tokens.css。ここはシェルの骨格のみ。 */
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -67,5 +84,14 @@ body {
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
+}
+
+/* カードの見出しを盤面の“帯”に。全画面で一貫させる。 */
+.n-card > .n-card-header {
+  border-bottom: 1px solid var(--line);
+}
+.n-card > .n-card-header .n-card-header__main {
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 </style>

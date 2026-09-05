@@ -1,0 +1,10 @@
+# 依存・ビルド成果物（イメージ内で npm install / build するため不要・混入は有害）
+node_modules/
+dist/
+.vite/
+
+# ログ・ローカル設定
+npm-debug.log*
+*.local
+.env
+.env.*

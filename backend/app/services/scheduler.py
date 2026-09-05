@@ -65,6 +65,9 @@ class EmployeeSpec:
     hourly_wage: int
     main_shift_pinned: bool = False  # True ならメイン区分のみに配置(ハード制約)
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
+    # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
+    available_start: int | None = None
+    available_end: int | None = None
 
 
 @dataclass
@@ -227,6 +230,17 @@ class ShiftScheduler:
             for d in days:
                 for p in pats:
                     if not p.is_basic:
+                        model.Add(x[(e.id, d, p.id)] == 0)
+
+        # Hard: 「普段入れる時間帯」を設定した従業員は、その窓に完全に収まる
+        # パターンにしか配置しない（拡張時集合の包含で判定）。
+        for e in emps:
+            if e.available_start is None or e.available_end is None:
+                continue
+            win = _window_hours(e.available_start, e.available_end)
+            for p in pats:
+                if not pat_hours[p.id] <= win:
+                    for d in days:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
         # Constraint: 時間カバレッジ。各日 d・各時 h で、その時間をカバーするパターンに
@@ -473,6 +487,17 @@ class ShiftScheduler:
 
 def _crosses_midnight(start: time, end: time) -> bool:
     return end <= start
+
+
+def _window_hours(start: int, end: int) -> set[int]:
+    """「普段入れる時間帯」を拡張時集合に変換（_pattern_hours と同じ規約）。
+
+    例: 9-22 -> {9..21} / 18-2（翌2:00）-> {18..25}。パターンのカバー時間が
+    この集合に完全に含まれるときだけ配置可とする。
+    """
+    if end <= start:
+        end += 24
+    return set(range(start, end))
 
 
 def _parse_note_hours(note: str | None) -> frozenset[int]:
