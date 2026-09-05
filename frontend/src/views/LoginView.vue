@@ -50,8 +50,11 @@ async function reset() {
 <template>
   <div class="login-shell">
     <NCard class="login-card">
-      <h1 class="title">AI-Shifts-Management</h1>
-      <p class="subtitle">シフト作成を AI で 30 分に。</p>
+      <div class="brand-row">
+        <span class="mark" aria-hidden="true">勤</span>
+        <h1 class="title">シフト勤務表</h1>
+      </div>
+      <p class="subtitle">月のシフトを組み、人件費まで一枚で。</p>
 
       <NButton type="primary" size="large" block @click="loginWithGoogle">
         Google Workspace でログイン
@@ -89,27 +92,63 @@ async function reset() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(140deg, #26314f, #4067a5);
+  padding: 24px;
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 .login-card {
   width: 440px;
-  padding: 24px;
+  max-width: 100%;
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 8px 30px rgba(25, 28, 24, 0.1);
+}
+/* 上端に時間帯(朝→夕→深夜)の帯を1本 */
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--morning), var(--evening), var(--night));
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--indigo);
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+}
 .title {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.01em;
 }
 
 .subtitle {
-  margin: 0 0 24px;
-  color: #6b7080;
+  margin: 6px 0 22px;
+  color: var(--ink-2);
 }
 
 .hint {
-  color: #8892a6;
+  color: var(--ink-3);
   font-size: 12px;
   margin-top: 12px;
+  line-height: 1.7;
 }
 </style>

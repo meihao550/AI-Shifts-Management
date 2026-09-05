@@ -140,10 +140,13 @@ function isoLocalDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+type Band = 'morning' | 'evening' | 'night' | null
+
 interface AssignmentCell {
   label: string
   mainMismatch: boolean
   paidLeave: boolean
+  band: Band // 時間帯の機能色（先頭割当の区分）
 }
 
 // 割当の shift_type にはパターンの code が入る。メイン照合は区分(category)でも
@@ -154,12 +157,12 @@ function categoryOfCode(shiftCode: string | null): string | null {
 }
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
-  if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false }
+  if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false, band: null }
   const iso = isoLocalDate(date)
 
   // 有給日はシフトより優先して「有給」と表示する
   if (paidLeaveFor(employeeId, iso)) {
-    return { label: '有給', mainMismatch: false, paidLeave: true }
+    return { label: '有給', mainMismatch: false, paidLeave: true, band: null }
   }
 
   const emp = employeeStore.employees.find((e) => e.id === employeeId)
@@ -168,7 +171,7 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   const matches = draft.value.filter(
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
-  if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false }
+  if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false, band: null }
 
   // code そのもの、または区分(category)が main_shift_type と一致すればメイン扱い。
   const mainMismatch =
@@ -176,11 +179,30 @@ function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
     matches.some(
       (a) => a.shift_type !== mainType && categoryOfCode(a.shift_type) !== mainType,
     )
+  const cat = categoryOfCode(matches[0].shift_type)
+  const band: Band =
+    cat === 'morning' || cat === 'evening' || cat === 'night' ? cat : null
   return {
     label: matches.map((a) => timeRange(a)).join(', '),
     mainMismatch,
     paidLeave: false,
+    band,
   }
+}
+
+// 各セルの表示値を1描画1回だけ計算してマップ化（区分色・ラベル等）。
+const EMPTY_CELL: AssignmentCell = { label: '', mainMismatch: false, paidLeave: false, band: null }
+const cellMap = computed(() => {
+  const m = new Map<string, AssignmentCell>()
+  for (const emp of employeeStore.employees) {
+    for (const d of days.value) {
+      m.set(`${emp.id}|${isoLocalDate(d)}`, assignmentsFor(emp.id, d))
+    }
+  }
+  return m
+})
+function cellAt(employeeId: number, date: Date): AssignmentCell {
+  return cellMap.value.get(`${employeeId}|${isoLocalDate(date)}`) ?? EMPTY_CELL
 }
 
 function cellStyle(date: Date) {
@@ -495,12 +517,16 @@ function goPrint() {
                   <template v-for="emp in employeeStore.employees" :key="emp.id">
                     <td
                       class="cell cell-editable"
-                      :class="{
-                        'cell-main-mismatch': assignmentsFor(emp.id, d).mainMismatch,
-                        'cell-paid-leave': assignmentsFor(emp.id, d).paidLeave,
-                      }"
+                      :class="[
+                        cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
+                        {
+                          'cell-main-mismatch': cellAt(emp.id, d).mainMismatch,
+                          'cell-paid-leave': cellAt(emp.id, d).paidLeave,
+                          'is-empty': !cellAt(emp.id, d).label,
+                        },
+                      ]"
                       :title="
-                        assignmentsFor(emp.id, d).mainMismatch
+                        cellAt(emp.id, d).mainMismatch
                           ? `${emp.name} のメインシフト (${
                               shiftTypeLabel(emp.main_shift_type ?? '')
                             }) 以外で入っています`
@@ -508,16 +534,20 @@ function goPrint() {
                       "
                       @click="openCellEdit(emp.id, d)"
                     >
-                      {{ assignmentsFor(emp.id, d).label }}
+                      {{ cellAt(emp.id, d).label }}
                     </td>
                   </template>
                 </tr>
               </tbody>
             </table>
-            <p class="legend">
-              <span class="legend-swatch legend-swatch--mismatch"></span>
-              赤: メインシフト以外で入っている割当
-            </p>
+            <div class="legend">
+              <span class="legend-item"><i class="sw band-morning"></i>朝</span>
+              <span class="legend-item"><i class="sw band-evening"></i>夕</span>
+              <span class="legend-item"><i class="sw band-night"></i>深夜</span>
+              <span class="legend-sep"></span>
+              <span class="legend-item"><i class="sw sw--mismatch"></i>メイン外</span>
+              <span class="legend-item"><i class="sw sw--leave"></i>有給</span>
+            </div>
           </div>
         </template>
       </NSpin>
@@ -582,6 +612,9 @@ function goPrint() {
 .table-scroll {
   overflow-x: auto;
   max-width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel);
 }
 .shift-grid {
   border-collapse: collapse;
@@ -590,46 +623,77 @@ function goPrint() {
 }
 .shift-grid th,
 .shift-grid td {
-  border: 1px solid #dde1e8;
-  padding: 4px 6px;
+  border: 1px solid var(--line);
+  padding: 5px 7px;
   text-align: center;
-  min-width: 40px;
+  min-width: 44px;
   white-space: nowrap;
 }
 .shift-grid th {
-  background: #f2f4f9;
+  background: var(--panel-strip);
+  color: var(--ink-2);
+  font-weight: 700;
   position: sticky;
   top: 0;
+  z-index: 1;
 }
 .shift-grid td.fixed,
 .shift-grid th.fixed {
   position: sticky;
   left: 0;
-  background: #fff;
-  z-index: 1;
+  background: var(--panel);
+  z-index: 2;
   text-align: left;
-  min-width: 68px;
+  min-width: 74px;
   white-space: nowrap;
+  font-weight: 600;
+}
+.shift-grid td.fixed small {
+  color: var(--ink-3);
+  font-weight: 500;
 }
 .shift-grid th.fixed {
-  background: #eaeef7;
-  z-index: 2;
+  background: var(--panel-strip);
+  z-index: 3;
 }
 .shift-grid td.cell-editable {
   cursor: pointer;
+  color: var(--ink);
+}
+.shift-grid td.is-empty {
+  color: var(--line-2);
 }
 .shift-grid td.cell-editable:hover {
-  background: #eef4ff;
+  outline: 2px solid var(--indigo);
+  outline-offset: -2px;
+}
+/* 時間帯バンド: 割当の区分を淡い機能色で塗る（左に太めの色帯） */
+.shift-grid td.band-morning {
+  background: var(--morning-bg);
+  color: var(--morning-ink);
+  box-shadow: inset 3px 0 0 var(--morning);
+}
+.shift-grid td.band-evening {
+  background: var(--evening-bg);
+  color: var(--evening-ink);
+  box-shadow: inset 3px 0 0 var(--evening);
+}
+.shift-grid td.band-night {
+  background: var(--night-bg);
+  color: var(--night-ink);
+  box-shadow: inset 3px 0 0 var(--night);
 }
 .shift-grid td.cell-main-mismatch {
-  background: #ffe3e3;
-  color: #c92a2a;
+  background: var(--danger-bg);
+  color: var(--danger);
   font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 .shift-grid td.cell-paid-leave {
-  background: #fff4e0;
-  color: #b06a12;
+  background: var(--warn-bg);
+  color: var(--warn);
   font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--warn);
 }
 .shortfall-list {
   max-height: 120px;
@@ -645,24 +709,51 @@ function goPrint() {
 .shortfall-note {
   margin: 8px 0 0;
   font-size: 11px;
-  color: #8892a6;
+  color: var(--ink-3);
 }
 .legend {
-  margin: 12px 0 0;
+  margin: 12px 2px 0;
   font-size: 12px;
-  color: #6b7080;
+  color: var(--ink-2);
   display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.legend-swatch {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
+.legend .sw {
+  width: 13px;
+  height: 13px;
   border-radius: 3px;
-  border: 1px solid #dde1e8;
+  border: 1px solid var(--line-2);
 }
-.legend-swatch--mismatch {
-  background: #ffe3e3;
+.legend .sw.band-morning {
+  background: var(--morning-bg);
+  box-shadow: inset 3px 0 0 var(--morning);
+}
+.legend .sw.band-evening {
+  background: var(--evening-bg);
+  box-shadow: inset 3px 0 0 var(--evening);
+}
+.legend .sw.band-night {
+  background: var(--night-bg);
+  box-shadow: inset 3px 0 0 var(--night);
+}
+.legend .sw--mismatch {
+  background: var(--danger-bg);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.legend .sw--leave {
+  background: var(--warn-bg);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.legend-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line-2);
 }
 </style>

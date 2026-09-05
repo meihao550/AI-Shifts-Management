@@ -5,6 +5,8 @@ import naive from 'naive-ui'
 import '@fontsource/m-plus-rounded-1c/400.css'
 import '@fontsource/m-plus-rounded-1c/500.css'
 import '@fontsource/m-plus-rounded-1c/700.css'
+// デザインシステム（Duty Board トークン・基盤スタイル）
+import '@/styles/tokens.css'
 import App from './App.vue'
 import router from './router'
 

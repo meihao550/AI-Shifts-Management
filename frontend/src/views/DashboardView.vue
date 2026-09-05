@@ -9,7 +9,6 @@ import {
   NGrid,
   NGridItem,
   NSpin,
-  NStatistic,
   NTag,
 } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
@@ -67,21 +66,29 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
         {{ n.message }}
     </NAlert>
 
-    <NGrid :x-gap="16" :y-gap="16" :cols="3" responsive="screen">
-      <NGridItem>
-        <NCard title="今月">
-          <NStatistic :label="monthLabel" :value="monthlyCost.toLocaleString()" suffix="円 (人件費)" />
-        </NCard>
-      </NGridItem>
+    <section class="cost-hero">
+      <div class="cost-hero__band" aria-hidden="true"></div>
+      <p class="eyebrow">{{ monthLabel }} の人件費</p>
+      <p class="cost-hero__value">
+        <span class="yen">¥</span>{{ monthlyCost.toLocaleString() }}
+      </p>
+      <NButton quaternary size="small" @click="router.push('/payroll')">
+        内訳を見る
+      </NButton>
+    </section>
+
+    <NGrid :x-gap="16" :y-gap="16" :cols="2" responsive="screen">
       <NGridItem>
         <NCard title="自分の勤務時間">
-          <NStatistic v-if="totalHoursForMe !== null" label="今月の総勤務時間" :value="totalHoursForMe" suffix="h" />
+          <p v-if="totalHoursForMe !== null" class="stat-number">
+            {{ totalHoursForMe }}<span class="unit">h</span>
+          </p>
           <NEmpty v-else description="従業員リンクなし" />
         </NCard>
       </NGridItem>
       <NGridItem>
         <NCard title="シフト状態">
-          <div v-if="shift">
+          <div v-if="shift" class="status-row">
             <NTag :type="shift.status === 'finalized' ? 'success' : 'default'" size="large">
               {{
                 shift.status === 'finalized'
@@ -91,7 +98,7 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
                     : 'ドラフト'
               }}
             </NTag>
-            <p class="hint">割当件数: {{ shift.assignments.length }}</p>
+            <span class="hint">割当 {{ shift.assignments.length }} 件</span>
           </div>
           <NEmpty v-else description="今月のシフトは未作成" />
         </NCard>
@@ -128,14 +135,56 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
 }
 
 .hint {
-  color: #8892a6;
-  margin: 8px 0 0;
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 13px;
 }
 
 .preview {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 人件費ヒーロー: 月の一枚看板 */
+.cost-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-panel);
+  padding: 22px 24px 20px;
+  box-shadow: var(--shadow-panel);
+}
+.cost-hero__band {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg, var(--morning), var(--evening), var(--night));
+}
+.cost-hero .eyebrow {
+  margin: 0 0 4px;
+}
+.cost-hero__value {
+  margin: 0 0 10px;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+.cost-hero__value .yen {
+  font-size: 26px;
+  margin-right: 2px;
+  color: var(--ink-2);
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.stat-number .unit {
+  font-size: 16px;
+  color: var(--ink-2);
+  margin-left: 3px;
 }
 </style>

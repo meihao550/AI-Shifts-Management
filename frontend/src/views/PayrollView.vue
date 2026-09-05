@@ -7,7 +7,6 @@ import {
   NDataTable,
   NInputNumber,
   NSpace,
-  NStatistic,
   NTag,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -89,12 +88,16 @@ const dayColumns: DataTableColumns<PayrollDay> = [
       </ul>
     </NAlert>
 
-    <NCard v-if="payroll" title="サマリ">
-      <NSpace align="center">
-        <NStatistic label="月間人件費" :value="payroll.monthly_total.toLocaleString()" suffix="円" />
-        <NTag :bordered="false" type="info">従業員数: {{ payroll.rows.length }} 名</NTag>
-      </NSpace>
-    </NCard>
+    <section v-if="payroll" class="cost-hero">
+      <div class="cost-hero__band" aria-hidden="true"></div>
+      <div>
+        <p class="eyebrow">{{ year }}年{{ month }}月 の人件費合計</p>
+        <p class="cost-hero__value">
+          <span class="yen">¥</span>{{ payroll.monthly_total.toLocaleString() }}
+        </p>
+      </div>
+      <NTag :bordered="false" round>従業員 {{ payroll.rows.length }} 名</NTag>
+    </section>
 
     <NCard v-if="payroll" title="従業員別">
       <NDataTable :columns="rowColumns" :data="payroll.rows" :bordered="false" />
@@ -105,3 +108,41 @@ const dayColumns: DataTableColumns<PayrollDay> = [
     </NCard>
   </NSpace>
 </template>
+
+<style scoped>
+.cost-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-panel);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-panel);
+}
+.cost-hero__band {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg, var(--morning), var(--evening), var(--night));
+}
+.cost-hero .eyebrow {
+  margin: 0 0 4px;
+}
+.cost-hero__value {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+.cost-hero__value .yen {
+  font-size: 24px;
+  margin-right: 2px;
+  color: var(--ink-2);
+}
+</style>

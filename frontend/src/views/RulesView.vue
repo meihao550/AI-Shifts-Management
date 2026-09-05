@@ -210,7 +210,7 @@ onMounted(async () => {
       <template #header-extra>
         <NButton type="primary" @click="openAdd">パターン追加</NButton>
       </template>
-      <p style="margin-top: 0; color: #6b7080">
+      <p style="margin-top: 0; color: var(--ink-2)">
         基本パターン(朝/夜/深夜)に加え、Wワーク向けの不定時刻パターンもここから追加できます
         (「基本パターン」を OFF にすると Wワーク扱い)。
       </p>
@@ -222,7 +222,7 @@ onMounted(async () => {
       <template #header-extra>
         <NButton type="primary" @click="saveHourlyStaffing">保存</NButton>
       </template>
-      <p style="margin-top: 0; color: #6b7080">
+      <p style="margin-top: 0; color: var(--ink-2)">
         営業日は 1:00 起点で扱います。深夜跨ぎは拡張時表記(24:00 = 翌0:00)。各時間ちょうどの
         人数になるよう配置します。
       </p>
@@ -255,7 +255,7 @@ onMounted(async () => {
       style="width: 420px"
     >
       <NSpace vertical>
-        <p style="margin: 0; color: #6b7080; font-size: 12px">
+        <p style="margin: 0; color: var(--ink-2); font-size: 12px">
           開始・終了時刻と休憩を入力してください。表示名・区分は自動で決まります（表示名は任意）。
           新規追加したパターンはWワーク向け（掛け持ち従業員のみ配置可）として登録されます。
         </p>
@@ -288,10 +288,12 @@ onMounted(async () => {
 .staffing th,
 .staffing td {
   padding: 8px 12px;
-  border: 1px solid #dde1e8;
+  border: 1px solid var(--line);
   text-align: left;
 }
 .staffing th {
-  background: #f2f4f9;
+  background: var(--panel-strip);
+  color: var(--ink-2);
+  font-weight: 700;
 }
 </style>
