@@ -74,7 +74,6 @@ const patternColumns: DataTableColumns<ShiftPattern> = [
   { title: '開始', key: 'start_time' },
   { title: '終了', key: 'end_time' },
   { title: '休憩', key: 'rest_minutes', render: (r) => `${r.rest_minutes / 60}時間` },
-  { title: 'シフトの扱い', key: 'is_basic', render: (r) => (r.is_basic ? '基本' : 'Wワーク') },
   {
     title: '操作',
     key: 'ops',

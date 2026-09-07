@@ -47,7 +47,6 @@ export interface ShiftPattern {
   label: string
   start_time: string
   end_time: string
-  is_basic: boolean
   category: string
   rest_minutes: number
 }

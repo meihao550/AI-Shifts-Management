@@ -32,8 +32,7 @@ def create_pattern(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    # 時刻からコード・表示名・区分を自動生成する。ユーザーが追加するパターンは
-    # Wワーク扱い(is_basic=False)＝通常従業員には割り当てない。
+    # 時刻からコード・表示名・区分を自動生成する。パターンの区別(基本/Wワーク)は廃止(ADR-0004)。
     code = make_pattern_code(payload.start_time, payload.end_time)
     existing = db.execute(
         select(ShiftPattern).where(ShiftPattern.code == code)
@@ -45,7 +44,6 @@ def create_pattern(
         label=payload.label or make_pattern_label(payload.start_time, payload.end_time),
         start_time=payload.start_time,
         end_time=payload.end_time,
-        is_basic=False,
         category=infer_category(payload.start_time, payload.end_time),
         rest_minutes=payload.rest_minutes,
     )

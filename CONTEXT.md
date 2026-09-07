@@ -24,9 +24,11 @@ _Avoid_: シフト（曖昧）
 従業員が1週間（日曜起点）に入る割当の回数（`weekly_shifts`）。`weekly_shifts_pinned` が真の従業員は、完全な7日週で「ちょうどこの回数」を守るハード制約になる（半端な週はソフト按分）。必要人数と競合する週は、過剰配置を避けるため週回数を先にソフトへ落とす（[ADR-0003](docs/adr/0003-weekly-shift-count-hard-constraint.md)）。
 _Avoid_: メインシフト（廃止語）
 
-**Wワークパターン (Dual-work Pattern)**:
-`is_basic=false` のパターン。掛け持ち従業員(dual worker)のみ配置可。基本パターンは全員に配置可。
-例外: **勤務可能時間帯** を持つ通常従業員で、窓に収まる基本パターンが1つも無い場合は、窓に収まるWワークパターンにも配置できる（そうしないと1枠も入れないため）。
+**Wワークパターン (Dual-work Pattern)** — _廃止 (deprecated)_:
+かつては `is_basic=false` の掛け持ち専用パターンを指した。基本/Wワークのパターン区別は撤廃され、全パターンは1つのプールに統合された。配置制限は **勤務可能時間帯** のみ（[ADR-0004](docs/adr/0004-unify-shift-patterns.md)）。
+
+**Wワーク従業員 (Dual Worker)**:
+掛け持ち（複数の職を持つ）従業員の目印（`is_dual_worker`）。現在はシフト生成の配置には影響しない属性ラベル。
 
 ### 勤務時間 (Working Time)
 

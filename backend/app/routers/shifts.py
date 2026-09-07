@@ -153,7 +153,6 @@ async def generate_shift(
                 start=p.start_time,
                 end=p.end_time,
                 category=p.category,
-                is_basic=p.is_basic,
                 rest_minutes=p.rest_minutes,
             )
             for p in patterns

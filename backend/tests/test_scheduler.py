@@ -34,7 +34,6 @@ def _pattern(pattern_id: int, code: str, category: str, start: time, end: time) 
         start=start,
         end=end,
         category=category,
-        is_basic=True,
     )
 
 
@@ -236,79 +235,28 @@ def test_no_overstaffing_when_supply_exceeds_demand():
     assert any("週回数" in w for w in result.warnings)
 
 
-def test_dual_worker_pattern_only_for_dual_workers():
-    """Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに割り当てられる。"""
-    w_pattern = PatternSpec(
+def test_any_employee_can_use_any_pattern():
+    """パターン統合(ADR-0004): 基本/Wワークの区別が無くなり、通常従業員でも
+    どのパターンにも入れる（配置制限は勤務可能時間帯のみ）。"""
+    late = PatternSpec(
         id=3,
         code="w_20_01",
-        label="Wワーク 20:00-01:00",
+        label="20:00-01:00",
         start=time(20, 0),
         end=time(1, 0),
         category="evening",
-        is_basic=False,  # ← Wワーク専用
     )
     normal = EmployeeSpec(
         id=1, name="通常", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
     )
-    dual = EmployeeSpec(
-        id=2,
-        name="Wワーク",
-        weekly_target=7,
-        hourly_wage=1000,
-        weekly_shifts_pinned=False,
-        is_dual_worker=True,
-    )
-    # 20-24時台に 1 人必要 → Wワーク専用パターンでしか埋められない。
+    # 20-24時台に1人必要。以前は「Wワーク専用」で通常従業員は入れなかったが、今は入れる。
     result = _make_scheduler(
-        patterns=[MORNING, w_pattern],
+        patterns=[MORNING, late],
         staffing_rules=_hourly((range(20, 25), 1)),
-        employees=[normal, dual],
+        employees=[normal],
     ).solve()
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-
-    # Wワーク専用パターンに入っているのはWワーク従業員(id=2)だけ
-    for a in result.assignments:
-        if a["shift_type"] == "w_20_01":
-            assert a["employee_id"] == 2
-
-
-def test_peaked_requirement_forces_wwork_pattern_for_dual_worker():
-    """ピーク帯を基本パターンでは過剰になる形にすると、Wワーク専用パターンが
-    使われ、それは Wワーク従業員にのみ割り当てられる（方針B: ピーク運用）。"""
-    w_1017 = PatternSpec(
-        id=3,
-        code="w_1017",
-        label="Wワーク 10:00-17:00",
-        start=time(10, 0),
-        end=time(17, 0),
-        category="morning",
-        is_basic=False,  # ← Wワーク専用（通常従業員は不可）
-    )
-    normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
-    )
-    dual = EmployeeSpec(
-        id=2,
-        name="Wワーク",
-        weekly_target=7,
-        hourly_wage=1000,
-        weekly_shifts_pinned=False,
-        is_dual_worker=True,
-    )
-    # 9時=1（基本 MORNING が1枚）/ 10-16時=2（ピーク +1）。
-    # ピークの+1は 9時を過剰にせず埋める必要があり、10-17(W) でしか埋まらない。
-    result = _make_scheduler(
-        patterns=[MORNING, w_1017],
-        staffing_rules=_hourly((range(9, 10), 1), (range(10, 17), 2)),
-        employees=[normal, dual],
-    ).solve()
-    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-    assert not any("不足" in w for w in result.warnings)
-
-    # Wワーク専用パターンが実際に使われ、かつ Wワーク従業員(id=2)のみが入る
-    w_assigns = [a for a in result.assignments if a["shift_type"] == "w_1017"]
-    assert w_assigns, "ピークを埋めるために Wワークパターンが使われるはず"
-    assert all(a["employee_id"] == 2 for a in w_assigns)
+    assert any(a["shift_type"] == "w_20_01" for a in result.assignments)
 
 
 def test_staffing_shortage_recommends_hiring():
@@ -332,12 +280,8 @@ def test_window_hours_helper():
     assert _window_hours(18, 2) == set(range(18, 26))
 
 
-def test_windowed_regular_employee_uses_fitting_nonbasic_pattern():
-    """窓(9-16)に収まる基本パターンが無い通常従業員でも、窓に収まる非基本パターンに入れる。
-
-    回帰防止: 以前は非基本パターンがWワーク専用のため、9-16 しか入れない通常従業員が
-    1枠も入れなかった（基本パターンは 9-17 等で窓に収まらないため）。
-    """
+def test_windowed_employee_uses_fitting_pattern():
+    """窓(9-16)を持つ通常従業員は、窓に収まるパターンに入れる（配置制限は窓のみ）。"""
     part_time = PatternSpec(
         id=3,
         code="p_0900_1600",
@@ -345,7 +289,6 @@ def test_windowed_regular_employee_uses_fitting_nonbasic_pattern():
         start=time(9, 0),
         end=time(16, 0),
         category="morning",
-        is_basic=False,  # ← Wワーク専用扱いだが、窓的に基本が無い通常従業員は使える
     )
     emp = EmployeeSpec(
         id=1,

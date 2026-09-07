@@ -38,8 +38,7 @@ from app.services.holidays import category_for
 BALANCE_WEIGHT = 50
 PREFERENCE_WEIGHT = 1
 MAIN_SHIFT_WEIGHT = 1  # 廃止(ADR-0002): メインシフト寄せは撤廃。参照用に残置（現在は未使用）。
-# Wワーク従業員は Wワーク専用パターン(不定時刻)を優先して割り当てる（ソフト）。
-# 基本パターンで全時間が埋まると W 枠が使われないため、明示的に寄せる。
+# 廃止(ADR-0004): パターン統合により Wワーク寄せは撤廃。定数は参照用に残置（現在は未使用）。
 DUAL_WWORK_WEIGHT = 8
 # 新規採用者の想定 週勤務回数（人手不足時の推奨採用人数の計算に使用）
 DEFAULT_NEW_HIRE_WEEKLY = 5
@@ -55,8 +54,7 @@ class PatternSpec:
     label: str  # 表示名
     start: time  # 開始時刻
     end: time  # 終了時刻
-    category: str  # morning|evening|night
-    is_basic: bool  # 基本パターンかどうか
+    category: str  # morning|evening|night（開始時刻から自動判定）
     rest_minutes: int = 0  # 休憩(分)。割当へスナップショットする
 
 
@@ -248,23 +246,9 @@ class ShiftScheduler:
         #                 if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
         #                     model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Hard: Wワーク専用パターン(is_basic=False)は、原則 Wワーク従業員のみに配置する。
-        # 通常従業員(is_dual_worker=False)はWワーク専用パターンには入れない。
-        # 例外: 勤務可能時間帯(窓)を持つ通常従業員で、窓に収まる基本パターンが1つも無い場合は、
-        # そのままだと1枠も入れないため、非基本パターンの利用も許可する（下の窓制約で、窓に
-        # 収まるものだけに絞られる）。基本パターンに入れる人はこれまで通りWワーク枠に入れない。
-        for e in emps:
-            if e.is_dual_worker:
-                continue
-            if e.available_start is not None and e.available_end is not None:
-                win = _window_hours(e.available_start, e.available_end)
-                has_fitting_basic = any(p.is_basic and pat_hours[p.id] <= win for p in pats)
-                if not has_fitting_basic:
-                    continue  # 非基本パターンをブロックしない（窓制約が配置先を限定する）
-            for d in days:
-                for p in pats:
-                    if not p.is_basic:
-                        model.Add(x[(e.id, d, p.id)] == 0)
+        # 廃止(ADR-0004): 基本/Wワークのパターン区別(is_basic)を撤廃し、全パターンを1つのプールに
+        # 統合した。1時間単位の窓で配置を制御しているため区別は不要。誰でも（窓に収まる限り）
+        # どのパターンにも入れる。is_dual_worker は掛け持ちの目印として残すが配置には影響しない。
 
         # Hard: 「普段入れる時間帯」を設定した従業員は、その窓に完全に収まる
         # パターンにしか配置しない（拡張時集合の包含で判定）。
@@ -420,15 +404,15 @@ class ShiftScheduler:
         #             if p.code == e.main_shift_type or p.category == e.main_shift_type:
         #                 main_shift_bonus_terms.append(x[(e.id, d, p.id)])
 
-        # Soft: Wワーク従業員は Wワーク専用パターン(is_basic=False)を優先する。
-        dual_wwork_bonus_terms: list[cp_model.IntVar] = []
-        for e in emps:
-            if not e.is_dual_worker:
-                continue
-            for d in days:
-                for p in pats:
-                    if not p.is_basic:
-                        dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
+        # 廃止(ADR-0004): Wワーク専用パターンへの寄せボーナスも撤廃（パターンを統合したため）。
+        # dual_wwork_bonus_terms: list[cp_model.IntVar] = []
+        # for e in emps:
+        #     if not e.is_dual_worker:
+        #         continue
+        #     for d in days:
+        #         for p in pats:
+        #             if not p.is_basic:
+        #                 dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
 
         # Objective: minimize deviation from monthly target and reward preferences.
         # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
@@ -450,8 +434,9 @@ class ShiftScheduler:
         # 廃止(ADR-0002): メインシフト寄せボーナスは objective から除外。
         # if main_shift_bonus_terms:
         #     obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
-        if dual_wwork_bonus_terms:
-            obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
+        # 廃止(ADR-0004): Wワーク寄せボーナスは objective から除外。
+        # if dual_wwork_bonus_terms:
+        #     obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
         if loads:
             obj += BALANCE_WEIGHT * balance
         if slack_terms:

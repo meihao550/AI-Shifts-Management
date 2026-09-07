@@ -177,7 +177,7 @@ async function remove(id: number) {
         <NFormItem label="Wワーク(掛け持ち)">
           <NSwitch v-model:value="form.is_dual_worker" />
           <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
-            ONでWワーク専用パターンにも配置可（OFFは基本パターンのみ）
+            掛け持ち従業員の目印（シフト生成の配置には影響しません）
           </span>
         </NFormItem>
         <NFormItem label="週勤務回数">
