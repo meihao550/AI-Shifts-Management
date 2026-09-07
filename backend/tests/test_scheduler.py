@@ -332,6 +332,41 @@ def test_window_hours_helper():
     assert _window_hours(18, 2) == set(range(18, 26))
 
 
+def test_windowed_regular_employee_uses_fitting_nonbasic_pattern():
+    """窓(9-16)に収まる基本パターンが無い通常従業員でも、窓に収まる非基本パターンに入れる。
+
+    回帰防止: 以前は非基本パターンがWワーク専用のため、9-16 しか入れない通常従業員が
+    1枠も入れなかった（基本パターンは 9-17 等で窓に収まらないため）。
+    """
+    part_time = PatternSpec(
+        id=3,
+        code="p_0900_1600",
+        label="09:00-16:00",
+        start=time(9, 0),
+        end=time(16, 0),
+        category="morning",
+        is_basic=False,  # ← Wワーク専用扱いだが、窓的に基本が無い通常従業員は使える
+    )
+    emp = EmployeeSpec(
+        id=1,
+        name="A",
+        weekly_target=7,
+        hourly_wage=1000,
+        weekly_shifts_pinned=False,
+        available_start=9,
+        available_end=16,
+    )
+    result = _make_scheduler(
+        patterns=[MORNING, part_time],  # MORNING(9-17,基本)は窓外
+        staffing_rules=_hourly((range(9, 16), 1)),  # 9:00-16:00 に1人
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # 窓に収まる非基本パターンで実際に配置される（1枠も入れない状態にならない）
+    assert result.assignments
+    assert all(a["shift_type"] == "p_0900_1600" for a in result.assignments)
+
+
 def test_available_window_blocks_out_of_window_pattern():
     """窓 9-17 の従業員は、窓に収まらない夜勤(17-1)には配置されない。"""
     emp = EmployeeSpec(

@@ -248,11 +248,19 @@ class ShiftScheduler:
         #                 if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
         #                     model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Hard: Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに配置する。
+        # Hard: Wワーク専用パターン(is_basic=False)は、原則 Wワーク従業員のみに配置する。
         # 通常従業員(is_dual_worker=False)はWワーク専用パターンには入れない。
+        # 例外: 勤務可能時間帯(窓)を持つ通常従業員で、窓に収まる基本パターンが1つも無い場合は、
+        # そのままだと1枠も入れないため、非基本パターンの利用も許可する（下の窓制約で、窓に
+        # 収まるものだけに絞られる）。基本パターンに入れる人はこれまで通りWワーク枠に入れない。
         for e in emps:
             if e.is_dual_worker:
                 continue
+            if e.available_start is not None and e.available_end is not None:
+                win = _window_hours(e.available_start, e.available_end)
+                has_fitting_basic = any(p.is_basic and pat_hours[p.id] <= win for p in pats)
+                if not has_fitting_basic:
+                    continue  # 非基本パターンをブロックしない（窓制約が配置先を限定する）
             for d in days:
                 for p in pats:
                     if not p.is_basic:
