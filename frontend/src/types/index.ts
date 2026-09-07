@@ -19,8 +19,6 @@ export interface Employee {
   paid_leave_amount: number
   transport_cost: number
   hourly_wage: number
-  main_shift_type: string | null
-  main_shift_pinned: boolean
   is_dual_worker: boolean
   weekly_shifts: number
   role: UserRole

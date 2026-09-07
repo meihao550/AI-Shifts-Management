@@ -11,8 +11,6 @@ class EmployeeBase(BaseModel):
     age: int | None = Field(default=None, ge=15, le=99)
     transport_cost: int = Field(default=0, ge=0)
     hourly_wage: int = Field(default=1100, ge=0)
-    main_shift_type: str | None = None
-    main_shift_pinned: bool = False
     is_dual_worker: bool = False
     weekly_shifts: int = Field(default=3, ge=0, le=7)
     role: EmployeeRole = EmployeeRole.employee
@@ -34,8 +32,6 @@ class EmployeeUpdate(BaseModel):
     transport_cost: int | None = Field(default=None, ge=0)
     hourly_wage: int | None = Field(default=None, ge=0)
     paid_leave_amount: int | None = Field(default=None, ge=0)
-    main_shift_type: str | None = None
-    main_shift_pinned: bool | None = None
     is_dual_worker: bool | None = None
     weekly_shifts: int | None = Field(default=None, ge=0, le=7)
     role: EmployeeRole | None = None

@@ -19,7 +19,6 @@ def _employee(emp_id: int, name: str) -> EmployeeSpec:
         id=emp_id,
         name=name,
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
     )
 
@@ -174,30 +173,6 @@ def test_load_is_balanced_across_employees():
     assert max(values) - min(values) <= 2  # 偏りが小さい
 
 
-def test_pinned_employee_only_gets_main_category():
-    """メイン固定(ピン)した従業員は、メイン区分以外には配置されない（絶対遵守）。"""
-    a = EmployeeSpec(
-        id=1,
-        name="A",
-        weekly_target=7,
-        main_shift_type="morning",
-        hourly_wage=1000,
-        main_shift_pinned=True,
-    )
-    b = EmployeeSpec(id=2, name="B", weekly_target=7, main_shift_type=None, hourly_wage=1000)
-    result = _make_scheduler(
-        patterns=[MORNING, EVENING],
-        staffing_rules=_hourly((MORNING_HOURS, 1), (EVENING_HOURS, 1)),
-        employees=[a, b],
-    ).solve()
-    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-
-    code_to_category = {MORNING.code: MORNING.category, EVENING.code: EVENING.category}
-    for asg in result.assignments:
-        if asg["employee_id"] == 1:  # ピンした A はメイン区分(morning)のみ
-            assert code_to_category[asg["shift_type"]] == "morning"
-
-
 def test_dual_worker_pattern_only_for_dual_workers():
     """Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに割り当てられる。"""
     w_pattern = PatternSpec(
@@ -210,13 +185,12 @@ def test_dual_worker_pattern_only_for_dual_workers():
         is_basic=False,  # ← Wワーク専用
     )
     normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
+        id=1, name="通常", weekly_target=7, hourly_wage=1000
     )
     dual = EmployeeSpec(
         id=2,
         name="Wワーク",
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
         is_dual_worker=True,
     )
@@ -247,13 +221,12 @@ def test_peaked_requirement_forces_wwork_pattern_for_dual_worker():
         is_basic=False,  # ← Wワーク専用（通常従業員は不可）
     )
     normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
+        id=1, name="通常", weekly_target=7, hourly_wage=1000
     )
     dual = EmployeeSpec(
         id=2,
         name="Wワーク",
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
         is_dual_worker=True,
     )
@@ -300,7 +273,6 @@ def test_available_window_blocks_out_of_window_pattern():
         id=1,
         name="A",
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
         available_start=9,
         available_end=17,

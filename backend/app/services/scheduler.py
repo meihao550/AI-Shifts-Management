@@ -33,7 +33,7 @@ from app.services.holidays import category_for
 # こうしないと、メインシフト偏重で特定カテゴリの枠不足に引きずられ分配が偏る。
 BALANCE_WEIGHT = 50
 PREFERENCE_WEIGHT = 1
-MAIN_SHIFT_WEIGHT = 1
+MAIN_SHIFT_WEIGHT = 1  # 廃止(ADR-0002): メインシフト寄せは撤廃。参照用に残置（現在は未使用）。
 # Wワーク従業員は Wワーク専用パターン(不定時刻)を優先して割り当てる（ソフト）。
 # 基本パターンで全時間が埋まると W 枠が使われないため、明示的に寄せる。
 DUAL_WWORK_WEIGHT = 8
@@ -61,9 +61,7 @@ class EmployeeSpec:
     id: int
     name: str
     weekly_target: int  # 週に何回入りたいか
-    main_shift_type: str | None  # メインのシフト: Noneの場合もある
     hourly_wage: int
-    main_shift_pinned: bool = False  # True ならメイン区分のみに配置(ハード制約)
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
     # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
     available_start: int | None = None
@@ -214,13 +212,16 @@ class ShiftScheduler:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Hard: メインシフトをピン留めした従業員は、メイン区分以外に配置しない（絶対遵守）
-        for e in emps:
-            if e.main_shift_pinned and e.main_shift_type:
-                for d in days:
-                    for p in pats:
-                        if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
-                            model.Add(x[(e.id, d, p.id)] == 0)
+        # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
+        # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
+        # 3区分は粒度が粗く、デフォルトONにすると新規従業員が「朝」に固定される問題があったため。
+        # 挙動の由来を追えるよう、旧ロジックはコメントとして残す。
+        # for e in emps:
+        #     if e.main_shift_pinned and e.main_shift_type:
+        #         for d in days:
+        #             for p in pats:
+        #                 if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
+        #                     model.Add(x[(e.id, d, p.id)] == 0)
 
         # Hard: Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに配置する。
         # 通常従業員(is_dual_worker=False)はWワーク専用パターンには入れない。
@@ -364,19 +365,16 @@ class ShiftScheduler:
                         <= 1
                     )
 
-        # Soft main_shift_type bonus:
-        # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
-        # 一致した割当 1 個ごとに +1 のボーナス。
-        # Wワーク従業員は不定時刻が前提なのでメインシフト寄せの対象外にする
-        # （代わりに下の Wワーク寄せを効かせる）。
-        main_shift_bonus_terms: list[cp_model.IntVar] = []
-        for e in emps:
-            if not e.main_shift_type or e.is_dual_worker:
-                continue
-            for d in days:
-                for p in pats:
-                    if p.code == e.main_shift_type or p.category == e.main_shift_type:
-                        main_shift_bonus_terms.append(x[(e.id, d, p.id)])
+        # 廃止(ADR-0002): メインシフト区分への「寄せ」ボーナスも撤廃した（配置制御は
+        # 勤務可能時間帯に一本化）。挙動の由来を追えるよう、旧ロジックはコメントで残す。
+        # main_shift_bonus_terms: list[cp_model.IntVar] = []
+        # for e in emps:
+        #     if not e.main_shift_type or e.is_dual_worker:
+        #         continue
+        #     for d in days:
+        #         for p in pats:
+        #             if p.code == e.main_shift_type or p.category == e.main_shift_type:
+        #                 main_shift_bonus_terms.append(x[(e.id, d, p.id)])
 
         # Soft: Wワーク従業員は Wワーク専用パターン(is_basic=False)を優先する。
         dual_wwork_bonus_terms: list[cp_model.IntVar] = []
@@ -388,7 +386,7 @@ class ShiftScheduler:
                     if not p.is_basic:
                         dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
 
-        # Objective: minimize deviation from monthly target, reward preferences and main_shift matches.
+        # Objective: minimize deviation from monthly target and reward preferences.
         # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
         # 分配が縮退して一部の従業員が 0 枠になるため、最大負荷と最小負荷の差を縮める。
         balance = 0
@@ -405,8 +403,9 @@ class ShiftScheduler:
             obj += sum(penalties)
         if bonus_terms:
             obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
-        if main_shift_bonus_terms:
-            obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
+        # 廃止(ADR-0002): メインシフト寄せボーナスは objective から除外。
+        # if main_shift_bonus_terms:
+        #     obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
         if dual_wwork_bonus_terms:
             obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
         if loads:

@@ -26,11 +26,7 @@ const form = ref<Partial<Employee>>({})
 
 onMounted(() => store.fetchAll())
 
-const shiftOptions = [
-  { label: '朝', value: 'morning' },
-  { label: '夜', value: 'evening' },
-  { label: '深夜', value: 'night' },
-]
+// メインシフト区分(朝/夜/深夜)は廃止(ADR-0002)。配置制御は「普段入れる時間」に一本化。
 
 // 普段入れる時間帯（1時間刻み, 0〜24）。0:00〜24:00 を選択肢に。
 const hourOptions = Array.from({ length: 25 }, (_, h) => ({ label: `${h}:00`, value: h }))
@@ -47,20 +43,6 @@ const columns: DataTableColumns<Employee> = [
   { title: '年齢', key: 'age', width: 80 },
   { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
   { title: '交通費/日', key: 'transport_cost', width: 100, render: (r) => `¥${r.transport_cost}` },
-  {
-    title: 'メインシフト',
-    key: 'main_shift_type',
-    width: 100,
-    render: (r) =>
-      ({ morning: '朝', evening: '夜', night: '深夜' })[r.main_shift_type ?? ''] ??
-      (r.main_shift_type ?? '-'),
-  },
-  {
-    title: 'ピン',
-    key: 'main_shift_pinned',
-    width: 60,
-    render: (r) => (r.main_shift_pinned ? '○' : ''),
-  },
   {
     title: 'Wワーク',
     key: 'is_dual_worker',
@@ -116,8 +98,6 @@ function openCreate() {
     paid_leave_amount: 0,
     transport_cost: 0,
     hourly_wage: 1200,
-    main_shift_type: 'morning',
-    main_shift_pinned: false,
     is_dual_worker: false,
     weekly_shifts: 3,
     role: 'employee',
@@ -186,15 +166,6 @@ async function remove(id: number) {
         </NFormItem>
         <NFormItem label="有給金額">
           <NInputNumber v-model:value="form.paid_leave_amount" :min="0" style="width: 100%" />
-        </NFormItem>
-        <NFormItem label="メインシフト">
-          <NSelect v-model:value="form.main_shift_type" :options="shiftOptions" clearable />
-        </NFormItem>
-        <NFormItem label="メイン固定(ピン)">
-          <NSwitch v-model:value="form.main_shift_pinned" />
-          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
-            ONで「メイン区分のみ」に配置（絶対遵守）
-          </span>
         </NFormItem>
         <NFormItem label="Wワーク(掛け持ち)">
           <NSwitch v-model:value="form.is_dual_worker" />

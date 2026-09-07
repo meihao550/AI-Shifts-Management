@@ -110,15 +110,7 @@ const patternOptions = computed(() =>
   ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
 )
 
-const shiftTypeLabels: Record<string, string> = {
-  morning: '朝',
-  evening: '夜',
-  night: '深夜',
-}
-
-function shiftTypeLabel(code: string): string {
-  return shiftTypeLabels[code] ?? code
-}
+// メインシフト区分ラベル(shiftTypeLabel)は廃止(ADR-0002)に伴い削除。
 
 // "HH:MM:SS" → "H"（ちょうどの時刻）/ "H:MM"（分あり）。内部は HH:MM のまま保持し表示のみ簡略化。
 function hourLabel(t: string): string {
@@ -144,7 +136,6 @@ type Band = 'morning' | 'evening' | 'night' | null
 
 interface AssignmentCell {
   label: string
-  mainMismatch: boolean
   paidLeave: boolean
   band: Band // 時間帯の機能色（先頭割当の区分）
 }
@@ -157,41 +148,31 @@ function categoryOfCode(shiftCode: string | null): string | null {
 }
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
-  if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false, band: null }
+  if (!shift.value) return { label: '', paidLeave: false, band: null }
   const iso = isoLocalDate(date)
 
   // 有給日はシフトより優先して「有給」と表示する
   if (paidLeaveFor(employeeId, iso)) {
-    return { label: '有給', mainMismatch: false, paidLeave: true, band: null }
+    return { label: '有給', paidLeave: true, band: null }
   }
-
-  const emp = employeeStore.employees.find((e) => e.id === employeeId)
-  const mainType = emp?.main_shift_type ?? null
 
   const matches = draft.value.filter(
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
-  if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false, band: null }
+  if (matches.length === 0) return { label: '', paidLeave: false, band: null }
 
-  // code そのもの、または区分(category)が main_shift_type と一致すればメイン扱い。
-  const mainMismatch =
-    !!mainType &&
-    matches.some(
-      (a) => a.shift_type !== mainType && categoryOfCode(a.shift_type) !== mainType,
-    )
   const cat = categoryOfCode(matches[0].shift_type)
   const band: Band =
     cat === 'morning' || cat === 'evening' || cat === 'night' ? cat : null
   return {
     label: matches.map((a) => timeRange(a)).join(', '),
-    mainMismatch,
     paidLeave: false,
     band,
   }
 }
 
 // 各セルの表示値を1描画1回だけ計算してマップ化（区分色・ラベル等）。
-const EMPTY_CELL: AssignmentCell = { label: '', mainMismatch: false, paidLeave: false, band: null }
+const EMPTY_CELL: AssignmentCell = { label: '', paidLeave: false, band: null }
 const cellMap = computed(() => {
   const m = new Map<string, AssignmentCell>()
   for (const emp of employeeStore.employees) {
@@ -520,18 +501,11 @@ function goPrint() {
                       :class="[
                         cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
                         {
-                          'cell-main-mismatch': cellAt(emp.id, d).mainMismatch,
                           'cell-paid-leave': cellAt(emp.id, d).paidLeave,
                           'is-empty': !cellAt(emp.id, d).label,
                         },
                       ]"
-                      :title="
-                        cellAt(emp.id, d).mainMismatch
-                          ? `${emp.name} のメインシフト (${
-                              shiftTypeLabel(emp.main_shift_type ?? '')
-                            }) 以外で入っています`
-                          : 'クリックで編集'
-                      "
+                      title="クリックで編集"
                       @click="openCellEdit(emp.id, d)"
                     >
                       {{ cellAt(emp.id, d).label }}
@@ -682,12 +656,6 @@ function goPrint() {
   background: var(--night-bg);
   color: var(--night-ink);
   box-shadow: inset 3px 0 0 var(--night);
-}
-.shift-grid td.cell-main-mismatch {
-  background: var(--danger-bg);
-  color: var(--danger);
-  font-weight: 700;
-  box-shadow: inset 3px 0 0 var(--danger);
 }
 .shift-grid td.cell-paid-leave {
   background: var(--warn-bg);
