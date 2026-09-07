@@ -42,9 +42,14 @@ MAIN_SHIFT_WEIGHT = 1  # 廃止(ADR-0002): メインシフト寄せは撤廃。�
 DUAL_WWORK_WEIGHT = 8
 # 新規採用者の想定 週勤務回数（人手不足時の推奨採用人数の計算に使用）
 DEFAULT_NEW_HIRE_WEEKLY = 5
-# 時間カバレッジ違反（不足/過剰）のペナルティ重み。他のどの目的より十分大きくして、
-# 「厳密解が存在するなら必ず各時間ちょうどを満たす」ようにする（診断用の暫定解でのみ使用）。
+# 必要人数の不足ペナルティ重み。他のどの目的より十分大きくし、不足は最優先で潰す。
 COVERAGE_SLACK_WEIGHT = 1000
+# 各時間に許す過剰(surplus)の上限 α（ADR-0005）。「必要人数 ≤ 配置 ≤ 必要人数 + α」に収める。
+# 短い勤務可能時間帯の従業員などを +α の枠で入れられる。過剰の暴走は α で頭打ち。
+SURPLUS_TOLERANCE = 1
+# 過剰1人・1時間あたりの弱ペナルティ。平準化(BALANCE_WEIGHT)より十分小さくし、
+# 「誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない」挙動にする。
+SURPLUS_WEIGHT = 2
 
 
 @dataclass(frozen=True)
@@ -158,12 +163,10 @@ class ShiftScheduler:
     def solve(self) -> SchedulerResult:
         """3段フォールバックで必ず部分解を返す(ADR-0003)。
 
-        第1段: 週回数(完全週=ちょうど, ハード) ＋ 必要人数(==, ハード) の両方で解く。
-        第2段: 解が無ければ、必要人数(==)は保ったまま週回数を目標(ソフト)に緩める。
-               供給過多の週は各人の回数が自然に減り、必要人数を超える過剰配置は生じない。
-        第3段: それでも解が無い(＝必要人数ちょうども不可能＝真の人手不足)なら、必要人数を
-               スラック(不足)化し、不足時間帯を警告する。
-        過剰配置は「おかしなシフト」になるため、過剰を出すより先に週回数を諦める順序にしている。
+        第1段: 週回数(完全週=ちょうど, ハード) ＋ 必要人数(必要〜+α, ハード) の両方で解く。
+        第2段: 解が無ければ、必要人数(必要〜+α)は保ったまま週回数を目標(ソフト)に緩める。
+        第3段: それでも解が無い(＝必要人数も満たせない＝真の人手不足)なら、不足を許容し警告する。
+        各時間の過剰は +α まで（弱ペナルティ。ADR-0005）。α で頭打ちなので暴走はしない。
         いずれの場合も割当は返し、後から手動修正する運用を前提とする(要件書 OPT-06)。
         """
         # 第1段: 両方ハード
@@ -177,7 +180,7 @@ class ShiftScheduler:
             p2.warnings.insert(
                 0,
                 "一部の従業員は希望の週回数を満たせないため、週回数を目標(ソフト)に緩めた"
-                "暫定シフトを表示します（必要人数はちょうど満たしています）。"
+                "暫定シフトを表示します（必要人数は満たしています）。"
                 "対象者の週回数・勤務可能時間帯・必要人数を見直してください。",
             )
             return p2
@@ -261,10 +264,13 @@ class ShiftScheduler:
                     for d in days:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Constraint: 時間カバレッジ。各日 d・各時 h で、その時間をカバーするパターンに
-        # 入っている人数の合計 == 必要人数。深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。
-        slack_terms: list[cp_model.IntVar] = []
-        # (date, hour) -> (shortage, surplus)。診断(use_slack)時のみ。
+        # Constraint: 時間カバレッジ。各日 d・各時 h で、配置人数を「必要人数 ≤ 配置 ≤ 必要人数 + α」
+        # に収める(ADR-0005)。過剰(surplus)は最大 α までハードに許し、弱ペナルティで嫌う（誰かを
+        # 働かせられる時だけ +α を使う）。use_slack 時はさらに不足(shortage)も許して人手不足を診断。
+        # 深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。
+        shortage_terms: list[cp_model.IntVar] = []
+        surplus_terms: list[cp_model.IntVar] = []
+        # (date, hour) -> (shortage, surplus)。診断(use_slack)時の警告表示に使う。
         slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]] = {}
         for d in days:
             day_cat = category_for(d)
@@ -282,16 +288,18 @@ class ShiftScheduler:
                             f"必要人数 {required} を満たせません"
                         )
                     continue
+                # 過剰は最大 α（SURPLUS_TOLERANCE）まで
+                surplus = model.NewIntVar(0, SURPLUS_TOLERANCE, f"surp_{d.isoformat()}_h{hour}")
+                surplus_terms.append(surplus)
                 if use_slack:
                     shortage = model.NewIntVar(0, required, f"short_{d.isoformat()}_h{hour}")
-                    surplus = model.NewIntVar(0, len(emps), f"surp_{d.isoformat()}_h{hour}")
-                    # sum + shortage - surplus == required（不足も過剰も許容し、後で最小化）
+                    # sum + shortage - surplus == required（不足も許容。過剰は α まで）
                     model.Add(sum(covering) + shortage - surplus == required)
+                    shortage_terms.append(shortage)
                     slack_vars[(d, hour)] = (shortage, surplus)
-                    slack_terms.append(shortage)
-                    slack_terms.append(surplus)
                 else:
-                    model.Add(sum(covering) == required)
+                    # 必要人数以上・必要人数+α 以下（不足は許さない）
+                    model.Add(sum(covering) - surplus == required)
 
         # Constraint: each employee target shifts per month = weekly_target * ~4.3 (rounded)
         max_shifts_override = {
@@ -439,9 +447,12 @@ class ShiftScheduler:
         #     obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
         if loads:
             obj += BALANCE_WEIGHT * balance
-        if slack_terms:
-            # カバレッジ違反は他のどの目的より優先して潰す（十分大きな重み）。
-            obj += COVERAGE_SLACK_WEIGHT * sum(slack_terms)
+        if shortage_terms:
+            # 不足は他のどの目的より優先して潰す（十分大きな重み）。
+            obj += COVERAGE_SLACK_WEIGHT * sum(shortage_terms)
+        if surplus_terms:
+            # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
+            obj += SURPLUS_WEIGHT * sum(surplus_terms)
         model.Minimize(obj)
 
         solver = cp_model.CpSolver()

@@ -24,6 +24,9 @@ _Avoid_: シフト（曖昧）
 従業員が1週間（日曜起点）に入る割当の回数（`weekly_shifts`）。`weekly_shifts_pinned` が真の従業員は、完全な7日週で「ちょうどこの回数」を守るハード制約になる（半端な週はソフト按分）。必要人数と競合する週は、過剰配置を避けるため週回数を先にソフトへ落とす（[ADR-0003](docs/adr/0003-weekly-shift-count-hard-constraint.md)）。
 _Avoid_: メインシフト（廃止語）
 
+**許容過剰 (Surplus Tolerance, α)**:
+各時間に必要人数を超えて配置してよい上限（α）。`必要人数 ≤ 配置 ≤ 必要人数 + α`。短い勤務可能時間帯の従業員なども +α の枠で配置できる。既定 α=1（[ADR-0005](docs/adr/0005-coverage-surplus-tolerance.md)）。
+
 **Wワークパターン (Dual-work Pattern)** — _廃止 (deprecated)_:
 かつては `is_basic=false` の掛け持ち専用パターンを指した。基本/Wワークのパターン区別は撤廃され、全パターンは1つのプールに統合された。配置制限は **勤務可能時間帯** のみ（[ADR-0004](docs/adr/0004-unify-shift-patterns.md)）。
 
