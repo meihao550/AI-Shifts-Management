@@ -21,7 +21,7 @@ _Avoid_: シフト（曖昧）
 従業員が普段入れる時間帯を1時間単位で表す窓（`available_start_hour`〜`available_end_hour`）。設定するとハード制約になり、**窓に完全に収まるパターンにのみ**配置できる。未設定なら無制限。どのパターンに配置してよいかを制御する唯一の仕組み。
 
 **週シフト回数 (Weekly Shift Count)**:
-従業員が1週間（日曜起点）に入る割当の回数（`weekly_shifts`）。`weekly_shifts_pinned` が真の従業員は、完全な7日週で「ちょうどこの回数」を守るハード制約になる（半端な週はソフト按分）。必要人数と競合する週は個人の週回数を優先する（[ADR-0003](docs/adr/0003-weekly-shift-count-hard-constraint.md)）。
+従業員が1週間（日曜起点）に入る割当の回数（`weekly_shifts`）。`weekly_shifts_pinned` が真の従業員は、完全な7日週で「ちょうどこの回数」を守るハード制約になる（半端な週はソフト按分）。必要人数と競合する週は、過剰配置を避けるため週回数を先にソフトへ落とす（[ADR-0003](docs/adr/0003-weekly-shift-count-hard-constraint.md)）。
 _Avoid_: メインシフト（廃止語）
 
 **Wワークパターン (Dual-work Pattern)**:

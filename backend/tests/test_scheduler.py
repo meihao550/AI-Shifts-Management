@@ -176,36 +176,64 @@ def test_load_is_balanced_across_employees():
     assert max(values) - min(values) <= 2  # 偏りが小さい
 
 
-def test_weekly_pinned_employee_gets_exact_count_per_full_week():
-    """週回数固定(ピン)の従業員は、完全な7日週でちょうど weekly_target 回入る(ADR-0003)。
+def test_weekly_pinned_exact_when_feasible():
+    """需要と週回数が両立するとき、pinned 従業員は完全週でちょうど weekly_target 回入る。
 
-    2026年2月は日曜始まりの完全4週(2/1〜2/28)。朝は毎日1人必要で1人では
-    埋めきれないが、週ちょうど2回(ハード)は必ず守られ、不足は警告で報告される。
+    2026年2月は日曜始まりの完全4週。7人×週1回で、朝は毎日1人 → 各人ちょうど週1回で
+    全日を過不足なくカバーできる（第1段で両方ハードが解ける）。
     """
-    emp = EmployeeSpec(
-        id=1,
-        name="A",
-        weekly_target=2,
-        hourly_wage=1000,
-        weekly_shifts_pinned=True,
-    )
+    emps = [
+        EmployeeSpec(
+            id=i, name=f"E{i}", weekly_target=1, hourly_wage=1000, weekly_shifts_pinned=True
+        )
+        for i in range(1, 8)
+    ]
     result = _make_scheduler(
         patterns=[MORNING],
         staffing_rules=_hourly((MORNING_HOURS, 1)),
-        employees=[emp],
+        employees=emps,
     ).solve()
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert not any("不足" in w for w in result.warnings)
 
-    # 日曜起点の週ごとの割当回数を数える
-    week_counts: dict[object, int] = defaultdict(int)
+    # 各週(日曜起点)・各人ちょうど1回
+    per_week: dict[tuple[int, object], int] = defaultdict(int)
     for a in result.assignments:
         d = a["target_date"]
         week_start = d - timedelta(days=(d.weekday() + 1) % 7)
-        week_counts[week_start] += 1
-    assert len(week_counts) == 4  # 2026年2月は完全4週
-    assert all(c == 2 for c in week_counts.values())  # 各週ちょうど2回
-    # 必要人数(毎日1人)は満たせないので不足の警告が出る
-    assert any("不足" in w for w in result.warnings)
+        per_week[(a["employee_id"], week_start)] += 1
+    assert per_week
+    assert all(c == 1 for c in per_week.values())
+
+
+def test_no_overstaffing_when_supply_exceeds_demand():
+    """供給過多でも必要人数を超える過剰配置をしない（ADR-0003: 過剰を出すより週回数を諦める）。
+
+    3人が全員「週7回(毎日)」固定だが、朝は毎日1人しか要らない。過剰にはせず、
+    必要人数ちょうどに収めて週回数はソフトに落とし、その旨を警告する。
+    """
+    emps = [
+        EmployeeSpec(
+            id=i, name=f"E{i}", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=True
+        )
+        for i in range(1, 4)
+    ]
+    result = _make_scheduler(
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=emps,
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    # どの(日,時)も必要人数(1)を超えない＝過剰配置ゼロ
+    coverage: dict[tuple[object, int], int] = defaultdict(int)
+    for a in result.assignments:
+        for h in _pattern_hours(a["start_time"], a["end_time"]):
+            coverage[(a["target_date"], h)] += 1
+    assert coverage
+    assert all(n <= 1 for n in coverage.values())
+    # 週回数(ちょうど7)は満たせないので警告が出る
+    assert any("週回数" in w for w in result.warnings)
 
 
 def test_dual_worker_pattern_only_for_dual_workers():
