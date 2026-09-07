@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import {
   NButton,
   NCard,
@@ -13,24 +13,78 @@ import {
   NSelect,
   NSpace,
   NSwitch,
+  NTag,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useEmployeeStore } from '@/stores/employee'
-import type { Employee } from '@/types'
+import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
 const message = useMessage()
 const showEdit = ref(false)
 const form = ref<Partial<Employee>>({})
 
-onMounted(() => store.fetchAll())
+// NGペア（一緒に入れたくない相手）。全ペアを持ち、編集中の従業員の相手を導出する。
+const pairs = ref<PairConstraint[]>([])
+const ngToAdd = ref<number | null>(null)
 
-const shiftOptions = [
-  { label: '朝', value: 'morning' },
-  { label: '夜', value: 'evening' },
-  { label: '深夜', value: 'night' },
-]
+async function loadPairs() {
+  pairs.value = await store.listPairs()
+}
+
+onMounted(async () => {
+  await store.fetchAll()
+  await loadPairs()
+})
+
+function empName(id: number): string {
+  return store.employees.find((e) => e.id === id)?.name ?? `#${id}`
+}
+
+// 編集中の従業員のNGペア相手（対称なので相手側のIDを取り出す）
+const ngPartners = computed(() => {
+  const id = form.value.id
+  if (!id) return [] as { pairId: number; empId: number }[]
+  return pairs.value
+    .filter((p) => p.employee_a_id === id || p.employee_b_id === id)
+    .map((p) => ({
+      pairId: p.id,
+      empId: p.employee_a_id === id ? p.employee_b_id : p.employee_a_id,
+    }))
+})
+
+// 追加候補（自分自身と既存の相手を除く）
+const ngCandidateOptions = computed(() => {
+  const id = form.value.id
+  const taken = new Set(ngPartners.value.map((pp) => pp.empId))
+  return store.employees
+    .filter((e) => e.id !== id && !taken.has(e.id))
+    .map((e) => ({ label: e.name, value: e.id }))
+})
+
+async function onAddNg(otherId: number | null) {
+  if (!otherId || !form.value.id) return
+  try {
+    await store.createPair(form.value.id, otherId)
+    await loadPairs()
+  } catch (e) {
+    message.error(`NGペア追加失敗: ${(e as Error).message}`)
+  } finally {
+    ngToAdd.value = null
+  }
+}
+
+async function removeNgPair(pairId: number) {
+  try {
+    await store.deletePair(pairId)
+    await loadPairs()
+  } catch (e) {
+    message.error(`NGペア削除失敗: ${(e as Error).message}`)
+  }
+}
+
+// メインシフト区分(朝/夜/深夜)は廃止(ADR-0002)。配置制御は「普段入れる時間」に一本化。
 
 // 普段入れる時間帯（1時間刻み, 0〜24）。0:00〜24:00 を選択肢に。
 const hourOptions = Array.from({ length: 25 }, (_, h) => ({ label: `${h}:00`, value: h }))
@@ -48,26 +102,18 @@ const columns: DataTableColumns<Employee> = [
   { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
   { title: '交通費/日', key: 'transport_cost', width: 100, render: (r) => `¥${r.transport_cost}` },
   {
-    title: 'メインシフト',
-    key: 'main_shift_type',
-    width: 100,
-    render: (r) =>
-      ({ morning: '朝', evening: '夜', night: '深夜' })[r.main_shift_type ?? ''] ??
-      (r.main_shift_type ?? '-'),
-  },
-  {
-    title: 'ピン',
-    key: 'main_shift_pinned',
-    width: 60,
-    render: (r) => (r.main_shift_pinned ? '○' : ''),
-  },
-  {
     title: 'Wワーク',
     key: 'is_dual_worker',
     width: 80,
     render: (r) => (r.is_dual_worker ? '○' : ''),
   },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
+  {
+    title: '週回数固定',
+    key: 'weekly_shifts_pinned',
+    width: 90,
+    render: (r) => (r.weekly_shifts_pinned ? '○' : ''),
+  },
   {
     title: '普段の時間',
     key: 'available_start_hour',
@@ -116,10 +162,9 @@ function openCreate() {
     paid_leave_amount: 0,
     transport_cost: 0,
     hourly_wage: 1200,
-    main_shift_type: 'morning',
-    main_shift_pinned: false,
     is_dual_worker: false,
     weekly_shifts: 3,
+    weekly_shifts_pinned: true,
     role: 'employee',
     active: true,
     available_start_hour: null,
@@ -187,23 +232,20 @@ async function remove(id: number) {
         <NFormItem label="有給金額">
           <NInputNumber v-model:value="form.paid_leave_amount" :min="0" style="width: 100%" />
         </NFormItem>
-        <NFormItem label="メインシフト">
-          <NSelect v-model:value="form.main_shift_type" :options="shiftOptions" clearable />
-        </NFormItem>
-        <NFormItem label="メイン固定(ピン)">
-          <NSwitch v-model:value="form.main_shift_pinned" />
-          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
-            ONで「メイン区分のみ」に配置（絶対遵守）
-          </span>
-        </NFormItem>
         <NFormItem label="Wワーク(掛け持ち)">
           <NSwitch v-model:value="form.is_dual_worker" />
           <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
-            ONでWワーク専用パターンにも配置可（OFFは基本パターンのみ）
+            掛け持ち従業員の目印（シフト生成の配置には影響しません）
           </span>
         </NFormItem>
         <NFormItem label="週勤務回数">
           <NInputNumber v-model:value="form.weekly_shifts" :min="0" :max="7" style="width: 100%" />
+        </NFormItem>
+        <NFormItem label="週回数を固定">
+          <NSwitch v-model:value="form.weekly_shifts_pinned" />
+          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
+            ONで完全な週はちょうど週回数だけ入れる（絶対遵守。半端な週は目安）
+          </span>
         </NFormItem>
         <NFormItem label="普段入れる時間">
           <NSpace align="center" :wrap="false" style="width: 100%">
@@ -226,6 +268,40 @@ async function remove(id: number) {
         </NFormItem>
         <p style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
           1時間刻み。空欄で制限なし。この時間内に収まるシフトにだけ生成配置します（終了が開始以前なら翌日扱い）。
+        </p>
+        <NFormItem label="NGペア">
+          <template v-if="form.id">
+            <NSpace vertical size="small" style="width: 100%">
+              <NSpace size="small" :wrap="true">
+                <NTag
+                  v-for="pp in ngPartners"
+                  :key="pp.pairId"
+                  closable
+                  type="warning"
+                  @close="removeNgPair(pp.pairId)"
+                >
+                  {{ empName(pp.empId) }}
+                </NTag>
+                <span v-if="!ngPartners.length" style="color: var(--ink-3); font-size: 12px">
+                  なし
+                </span>
+              </NSpace>
+              <NSelect
+                v-model:value="ngToAdd"
+                :options="ngCandidateOptions"
+                placeholder="一緒に入れたくない相手を追加"
+                filterable
+                clearable
+                @update:value="onAddNg"
+              />
+            </NSpace>
+          </template>
+          <span v-else style="color: var(--ink-3); font-size: 12px">
+            保存後、「編集」から設定できます
+          </span>
+        </NFormItem>
+        <p v-if="form.id" style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
+          同じ時間帯に一緒に入らないようシフト生成で考慮します（対称・即時保存）。
         </p>
         <NFormItem label="ロール">
           <NSelect

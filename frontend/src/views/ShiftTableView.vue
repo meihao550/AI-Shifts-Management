@@ -48,9 +48,12 @@ const availabilityForm = ref<{
 
 const loading = ref(false)
 
+// 直近の生成で返ってきた警告（人数不足・週回数を満たせない等）。トーストで一瞬出すのではなく
+// シフト表の上に出し続ける。生成のたびに更新し、別の月を読み込んだらクリアする。
+const genWarnings = ref<string[]>([])
+
 // 手動編集用のドラフト（保存されるまではこちらを表示・編集する）
 const draft = ref<ShiftAssignment[]>([])
-const dirty = ref(false)
 
 // 当月の有給（従業員×日付）。カレンダー/セルから登録され、即時に永続化する。
 const paidLeaveList = ref<Availability[]>([])
@@ -74,7 +77,6 @@ watch(
   () => shiftStore.shift,
   (s) => {
     draft.value = s ? s.assignments.map((a) => ({ ...a })) : []
-    dirty.value = false
   },
   { immediate: true },
 )
@@ -110,15 +112,7 @@ const patternOptions = computed(() =>
   ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
 )
 
-const shiftTypeLabels: Record<string, string> = {
-  morning: '朝',
-  evening: '夜',
-  night: '深夜',
-}
-
-function shiftTypeLabel(code: string): string {
-  return shiftTypeLabels[code] ?? code
-}
+// メインシフト区分ラベル(shiftTypeLabel)は廃止(ADR-0002)に伴い削除。
 
 // "HH:MM:SS" → "H"（ちょうどの時刻）/ "H:MM"（分あり）。内部は HH:MM のまま保持し表示のみ簡略化。
 function hourLabel(t: string): string {
@@ -144,7 +138,6 @@ type Band = 'morning' | 'evening' | 'night' | null
 
 interface AssignmentCell {
   label: string
-  mainMismatch: boolean
   paidLeave: boolean
   band: Band // 時間帯の機能色（先頭割当の区分）
 }
@@ -157,41 +150,31 @@ function categoryOfCode(shiftCode: string | null): string | null {
 }
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
-  if (!shift.value) return { label: '', mainMismatch: false, paidLeave: false, band: null }
+  if (!shift.value) return { label: '', paidLeave: false, band: null }
   const iso = isoLocalDate(date)
 
   // 有給日はシフトより優先して「有給」と表示する
   if (paidLeaveFor(employeeId, iso)) {
-    return { label: '有給', mainMismatch: false, paidLeave: true, band: null }
+    return { label: '有給', paidLeave: true, band: null }
   }
-
-  const emp = employeeStore.employees.find((e) => e.id === employeeId)
-  const mainType = emp?.main_shift_type ?? null
 
   const matches = draft.value.filter(
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
-  if (matches.length === 0) return { label: '', mainMismatch: false, paidLeave: false, band: null }
+  if (matches.length === 0) return { label: '', paidLeave: false, band: null }
 
-  // code そのもの、または区分(category)が main_shift_type と一致すればメイン扱い。
-  const mainMismatch =
-    !!mainType &&
-    matches.some(
-      (a) => a.shift_type !== mainType && categoryOfCode(a.shift_type) !== mainType,
-    )
   const cat = categoryOfCode(matches[0].shift_type)
   const band: Band =
     cat === 'morning' || cat === 'evening' || cat === 'night' ? cat : null
   return {
     label: matches.map((a) => timeRange(a)).join(', '),
-    mainMismatch,
     paidLeave: false,
     band,
   }
 }
 
 // 各セルの表示値を1描画1回だけ計算してマップ化（区分色・ラベル等）。
-const EMPTY_CELL: AssignmentCell = { label: '', mainMismatch: false, paidLeave: false, band: null }
+const EMPTY_CELL: AssignmentCell = { label: '', paidLeave: false, band: null }
 const cellMap = computed(() => {
   const m = new Map<string, AssignmentCell>()
   for (const emp of employeeStore.employees) {
@@ -300,7 +283,6 @@ async function saveCellEdit() {
         })
         paidLeaveList.value.push(created)
       }
-      dirty.value = true
     } else {
       // 有給以外: 既存の有給があれば解除（即時保存）
       if (existingLeave) {
@@ -327,9 +309,10 @@ async function saveCellEdit() {
           })
         }
       }
-      dirty.value = true
     }
     editCell.value = null
+    // 「反映」でそのまま保存まで行う（別途「更新」を押す二度手間をなくす）
+    await saveShift()
   } catch (e) {
     message.error(`更新失敗: ${(e as Error).message}`)
   }
@@ -349,7 +332,6 @@ async function saveShift() {
       rest_minutes: a.rest_minutes,
     }))
     await shiftStore.saveAssignments(shift.value.id, payload)
-    dirty.value = false
     if (shortfalls.value.length) {
       message.warning(`更新しました（人数不足が ${shortfalls.value.length} 件あります）`)
     } else {
@@ -361,6 +343,8 @@ async function saveShift() {
 }
 
 async function loadShift() {
+  // 別の月・再読み込み時は前回生成の警告を消す（その月のものではないため）
+  genWarnings.value = []
   loading.value = true
   try {
     await Promise.all([shiftStore.fetch(year.value, month.value), loadPaidLeave()])
@@ -379,8 +363,9 @@ async function generate() {
       use_llm: useLLM.value,
     })
     await loadPaidLeave()
+    genWarnings.value = res.warnings
     if (res.warnings.length) {
-      message.warning(res.warnings.join(' / '))
+      message.warning(`シフトを生成しました（注意 ${res.warnings.length} 件。表の上に表示中）`)
     } else {
       message.success(`シフトを生成しました (${res.solver_seconds}s / ${res.solver_status})`)
     }
@@ -472,13 +457,21 @@ function goPrint() {
                   : 'ドラフト'
             }}
           </NTag>
-          <NTag v-if="dirty" type="warning" size="small">未保存の変更あり</NTag>
-          <NButton v-if="shift" type="primary" size="small" :disabled="!dirty" @click="saveShift">
-            更新
-          </NButton>
         </NSpace>
       </template>
       <NSpin :show="loading || shiftStore.generating">
+        <NAlert
+          v-if="genWarnings.length"
+          type="warning"
+          title="シフト生成の注意"
+          closable
+          style="margin-bottom: 12px"
+          @close="genWarnings = []"
+        >
+          <ul class="gen-warning-list">
+            <li v-for="(w, i) in genWarnings" :key="i">{{ w }}</li>
+          </ul>
+        </NAlert>
         <NAlert v-if="!shift" type="info">
           このシフトはまだ作成されていません。上の「シフトを生成」から作成できます。
         </NAlert>
@@ -495,7 +488,7 @@ function goPrint() {
               </span>
             </div>
             <p class="shortfall-note">
-              ※土日は休日扱いで判定しています（祝日は未考慮）。編集後は「更新」で保存してください。
+              ※土日は休日扱いで判定しています（祝日は未考慮）。セルを編集して「反映」すると自動保存されます。
             </p>
           </NAlert>
           <div class="table-scroll">
@@ -520,18 +513,11 @@ function goPrint() {
                       :class="[
                         cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
                         {
-                          'cell-main-mismatch': cellAt(emp.id, d).mainMismatch,
                           'cell-paid-leave': cellAt(emp.id, d).paidLeave,
                           'is-empty': !cellAt(emp.id, d).label,
                         },
                       ]"
-                      :title="
-                        cellAt(emp.id, d).mainMismatch
-                          ? `${emp.name} のメインシフト (${
-                              shiftTypeLabel(emp.main_shift_type ?? '')
-                            }) 以外で入っています`
-                          : 'クリックで編集'
-                      "
+                      title="クリックで編集"
                       @click="openCellEdit(emp.id, d)"
                     >
                       {{ cellAt(emp.id, d).label }}
@@ -683,12 +669,6 @@ function goPrint() {
   color: var(--night-ink);
   box-shadow: inset 3px 0 0 var(--night);
 }
-.shift-grid td.cell-main-mismatch {
-  background: var(--danger-bg);
-  color: var(--danger);
-  font-weight: 700;
-  box-shadow: inset 3px 0 0 var(--danger);
-}
 .shift-grid td.cell-paid-leave {
   background: var(--warn-bg);
   color: var(--warn);
@@ -710,6 +690,14 @@ function goPrint() {
   margin: 8px 0 0;
   font-size: 11px;
   color: var(--ink-3);
+}
+.gen-warning-list {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .legend {
   margin: 12px 2px 0;

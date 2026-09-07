@@ -12,8 +12,12 @@ Produce a monthly assignment that:
   * meets required staffing per (date, hour) — HARD (時間カバレッジ方式)
   * respects unavailable days — HARD
   * respects preferred days (bonus) — SOFT
-  * respects each employee's weekly shift target — SOFT
+  * respects each employee's weekly shift count — HARD for weekly_shifts_pinned
+    employees on full (7-day) weeks, otherwise SOFT (ADR-0003, 日曜起点)
   * balances load — SOFT
+
+必要人数(HARD) と 週回数(HARD) は両立しない週が出るため、solve() は
+3段フォールバックで必ず部分解を返す（詳細は solve() のdocstring参照）。
 """
 
 from __future__ import annotations
@@ -33,15 +37,19 @@ from app.services.holidays import category_for
 # こうしないと、メインシフト偏重で特定カテゴリの枠不足に引きずられ分配が偏る。
 BALANCE_WEIGHT = 50
 PREFERENCE_WEIGHT = 1
-MAIN_SHIFT_WEIGHT = 1
-# Wワーク従業員は Wワーク専用パターン(不定時刻)を優先して割り当てる（ソフト）。
-# 基本パターンで全時間が埋まると W 枠が使われないため、明示的に寄せる。
+MAIN_SHIFT_WEIGHT = 1  # 廃止(ADR-0002): メインシフト寄せは撤廃。参照用に残置（現在は未使用）。
+# 廃止(ADR-0004): パターン統合により Wワーク寄せは撤廃。定数は参照用に残置（現在は未使用）。
 DUAL_WWORK_WEIGHT = 8
 # 新規採用者の想定 週勤務回数（人手不足時の推奨採用人数の計算に使用）
 DEFAULT_NEW_HIRE_WEEKLY = 5
-# 時間カバレッジ違反（不足/過剰）のペナルティ重み。他のどの目的より十分大きくして、
-# 「厳密解が存在するなら必ず各時間ちょうどを満たす」ようにする（診断用の暫定解でのみ使用）。
+# 必要人数の不足ペナルティ重み。他のどの目的より十分大きくし、不足は最優先で潰す。
 COVERAGE_SLACK_WEIGHT = 1000
+# 各時間に許す過剰(surplus)の上限 α（ADR-0005）。「必要人数 ≤ 配置 ≤ 必要人数 + α」に収める。
+# 短い勤務可能時間帯の従業員などを +α の枠で入れられる。過剰の暴走は α で頭打ち。
+SURPLUS_TOLERANCE = 1
+# 過剰1人・1時間あたりの弱ペナルティ。平準化(BALANCE_WEIGHT)より十分小さくし、
+# 「誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない」挙動にする。
+SURPLUS_WEIGHT = 2
 
 
 @dataclass(frozen=True)
@@ -51,8 +59,7 @@ class PatternSpec:
     label: str  # 表示名
     start: time  # 開始時刻
     end: time  # 終了時刻
-    category: str  # morning|evening|night
-    is_basic: bool  # 基本パターンかどうか
+    category: str  # morning|evening|night（開始時刻から自動判定）
     rest_minutes: int = 0  # 休憩(分)。割当へスナップショットする
 
 
@@ -61,9 +68,10 @@ class EmployeeSpec:
     id: int
     name: str
     weekly_target: int  # 週に何回入りたいか
-    main_shift_type: str | None  # メインのシフト: Noneの場合もある
     hourly_wage: int
-    main_shift_pinned: bool = False  # True ならメイン区分のみに配置(ハード制約)
+    # True なら「完全な7日週でちょうど weekly_target 回」をハード制約にする(ADR-0003)。
+    # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト、False は常にソフト。
+    weekly_shifts_pinned: bool = True
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
     # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
     available_start: int | None = None
@@ -153,25 +161,41 @@ class ShiftScheduler:
         return out
 
     def solve(self) -> SchedulerResult:
-        """まず「各時間ちょうど(==)」のハード制約で解く。
+        """3段フォールバックで必ず部分解を返す(ADR-0003)。
 
-        解が無い(INFEASIBLE)場合は、時間カバレッジをスラック(不足/過剰)付きに緩めて
-        再ソルブし、どの時間帯が満たせないかを診断しつつ暫定シフトを返す(要件書 OPT-06)。
+        第1段: 週回数(完全週=ちょうど, ハード) ＋ 必要人数(必要〜+α, ハード) の両方で解く。
+        第2段: 解が無ければ、必要人数(必要〜+α)は保ったまま週回数を目標(ソフト)に緩める。
+        第3段: それでも解が無い(＝必要人数も満たせない＝真の人手不足)なら、不足を許容し警告する。
+        各時間の過剰は +α まで（弱ペナルティ。ADR-0005）。α で頭打ちなので暴走はしない。
+        いずれの場合も割当は返し、後から手動修正する運用を前提とする(要件書 OPT-06)。
         """
-        hard = self._solve_once(use_slack=False)
-        if hard.solver_status != "INFEASIBLE":
-            return hard
+        # 第1段: 両方ハード
+        p1 = self._solve_once(use_slack=False, weekly_hard=True)
+        if p1.solver_status != "INFEASIBLE":
+            return p1
 
-        diag = self._solve_once(use_slack=True)
-        diag.warnings.insert(
+        # 第2段: 必要人数(==)は維持し、週回数をソフトに落とす（過剰を出さない）
+        p2 = self._solve_once(use_slack=False, weekly_hard=False)
+        if p2.solver_status in ("OPTIMAL", "FEASIBLE"):
+            p2.warnings.insert(
+                0,
+                "一部の従業員は希望の週回数を満たせないため、週回数を目標(ソフト)に緩めた"
+                "暫定シフトを表示します（必要人数は満たしています）。"
+                "対象者の週回数・勤務可能時間帯・必要人数を見直してください。",
+            )
+            return p2
+
+        # 第3段: 必要人数ちょうども満たせない（真の人手不足）ため、不足を許容する
+        p3 = self._solve_once(use_slack=True, weekly_hard=False)
+        p3.warnings.insert(
             0,
             "各時間ちょうどの必要人数を満たす解がないため、不足を許容した暫定シフトを表示します。"
-            "必要人数・シフトパターン・希望を見直してください。",
+            "必要人数・シフトパターン・従業員数を見直してください。",
         )
-        return diag
+        return p3
 
     # 制約をつくる
-    def _solve_once(self, use_slack: bool) -> SchedulerResult:
+    def _solve_once(self, use_slack: bool, weekly_hard: bool) -> SchedulerResult:
         warnings: list[str] = []
         model = cp_model.CpModel()
 
@@ -214,23 +238,20 @@ class ShiftScheduler:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Hard: メインシフトをピン留めした従業員は、メイン区分以外に配置しない（絶対遵守）
-        for e in emps:
-            if e.main_shift_pinned and e.main_shift_type:
-                for d in days:
-                    for p in pats:
-                        if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
-                            model.Add(x[(e.id, d, p.id)] == 0)
+        # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
+        # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
+        # 3区分は粒度が粗く、デフォルトONにすると新規従業員が「朝」に固定される問題があったため。
+        # 挙動の由来を追えるよう、旧ロジックはコメントとして残す。
+        # for e in emps:
+        #     if e.main_shift_pinned and e.main_shift_type:
+        #         for d in days:
+        #             for p in pats:
+        #                 if not (p.code == e.main_shift_type or p.category == e.main_shift_type):
+        #                     model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Hard: Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに配置する。
-        # 通常従業員(is_dual_worker=False)はWワーク専用パターンには入れない。
-        for e in emps:
-            if e.is_dual_worker:
-                continue
-            for d in days:
-                for p in pats:
-                    if not p.is_basic:
-                        model.Add(x[(e.id, d, p.id)] == 0)
+        # 廃止(ADR-0004): 基本/Wワークのパターン区別(is_basic)を撤廃し、全パターンを1つのプールに
+        # 統合した。1時間単位の窓で配置を制御しているため区別は不要。誰でも（窓に収まる限り）
+        # どのパターンにも入れる。is_dual_worker は掛け持ちの目印として残すが配置には影響しない。
 
         # Hard: 「普段入れる時間帯」を設定した従業員は、その窓に完全に収まる
         # パターンにしか配置しない（拡張時集合の包含で判定）。
@@ -243,10 +264,13 @@ class ShiftScheduler:
                     for d in days:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Constraint: 時間カバレッジ。各日 d・各時 h で、その時間をカバーするパターンに
-        # 入っている人数の合計 == 必要人数。深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。
-        slack_terms: list[cp_model.IntVar] = []
-        # (date, hour) -> (shortage, surplus)。診断(use_slack)時のみ。
+        # Constraint: 時間カバレッジ。各日 d・各時 h で、配置人数を「必要人数 ≤ 配置 ≤ 必要人数 + α」
+        # に収める(ADR-0005)。過剰(surplus)は最大 α までハードに許し、弱ペナルティで嫌う（誰かを
+        # 働かせられる時だけ +α を使う）。use_slack 時はさらに不足(shortage)も許して人手不足を診断。
+        # 深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。
+        shortage_terms: list[cp_model.IntVar] = []
+        surplus_terms: list[cp_model.IntVar] = []
+        # (date, hour) -> (shortage, surplus)。診断(use_slack)時の警告表示に使う。
         slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]] = {}
         for d in days:
             day_cat = category_for(d)
@@ -264,16 +288,18 @@ class ShiftScheduler:
                             f"必要人数 {required} を満たせません"
                         )
                     continue
+                # 過剰は最大 α（SURPLUS_TOLERANCE）まで
+                surplus = model.NewIntVar(0, SURPLUS_TOLERANCE, f"surp_{d.isoformat()}_h{hour}")
+                surplus_terms.append(surplus)
                 if use_slack:
                     shortage = model.NewIntVar(0, required, f"short_{d.isoformat()}_h{hour}")
-                    surplus = model.NewIntVar(0, len(emps), f"surp_{d.isoformat()}_h{hour}")
-                    # sum + shortage - surplus == required（不足も過剰も許容し、後で最小化）
+                    # sum + shortage - surplus == required（不足も許容。過剰は α まで）
                     model.Add(sum(covering) + shortage - surplus == required)
+                    shortage_terms.append(shortage)
                     slack_vars[(d, hour)] = (shortage, surplus)
-                    slack_terms.append(shortage)
-                    slack_terms.append(surplus)
                 else:
-                    model.Add(sum(covering) == required)
+                    # 必要人数以上・必要人数+α 以下（不足は許さない）
+                    model.Add(sum(covering) - surplus == required)
 
         # Constraint: each employee target shifts per month = weekly_target * ~4.3 (rounded)
         max_shifts_override = {
@@ -285,19 +311,30 @@ class ShiftScheduler:
             week_start = d - timedelta(days=(d.weekday() + 1) % 7)
             weeks.setdefault(week_start, []).append(d)
 
-        # Constraint: 月間の目標(週回数×週数)に近づける(ソフト)。分配の均等化は後段の balance で。
+        # Constraint: 週回数の目標（日曜起点の週ごと。ADR-0003）。
+        # weekly_shifts_pinned な従業員は「完全な7日週でちょうど weekly 回」をハード制約に
+        # する（weekly_hard=True のときのみ。第3段フォールバックでは False で全てソフト化）。
+        # 半端な週(月末月初)は常に按分ソフト、非 pinned も常にソフト。均等化は後段の balance で。
         penalties: list[cp_model.IntVar] = []
         loads: list[Any] = []
         for e in emps:
             weekly = max_shifts_override.get(e.id, e.weekly_target)
-            monthly_target = max(0, weekly * (len(days) // 7 + (1 if len(days) % 7 else 0)))
-            total = sum(x[(e.id, d, p.id)] for d in days for p in pats)
-            loads.append(total)
-            over = model.NewIntVar(0, len(days), f"over_e{e.id}")
-            under = model.NewIntVar(0, monthly_target, f"under_e{e.id}")
-            model.Add(total - monthly_target == over - under)
-            penalties.append(over)
-            penalties.append(under)
+            # balance 用の月間ロードは従来どおり全日の合計で持つ
+            loads.append(sum(x[(e.id, d, p.id)] for d in days for p in pats))
+            for wstart, wdays in weeks.items():
+                week_total = sum(x[(e.id, d, p.id)] for d in wdays for p in pats)
+                is_full_week = len(wdays) == 7
+                if weekly_hard and e.weekly_shifts_pinned and is_full_week:
+                    # Hard: 完全週はちょうど weekly 回（絶対遵守）
+                    model.Add(week_total == weekly)
+                    continue
+                # Soft: 目標との偏差を最小化。半端な週は日数で按分する。
+                target = weekly if is_full_week else round(weekly * len(wdays) / 7)
+                over = model.NewIntVar(0, len(wdays), f"over_e{e.id}_w{wstart.isoformat()}")
+                under = model.NewIntVar(0, max(0, target), f"under_e{e.id}_w{wstart.isoformat()}")
+                model.Add(week_total - target == over - under)
+                penalties.append(over)
+                penalties.append(under)
 
         # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
         # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、
@@ -364,31 +401,28 @@ class ShiftScheduler:
                         <= 1
                     )
 
-        # Soft main_shift_type bonus:
-        # 各従業員は自身の main_shift_type と一致するシフトを優先して割り当てたい。
-        # 一致した割当 1 個ごとに +1 のボーナス。
-        # Wワーク従業員は不定時刻が前提なのでメインシフト寄せの対象外にする
-        # （代わりに下の Wワーク寄せを効かせる）。
-        main_shift_bonus_terms: list[cp_model.IntVar] = []
-        for e in emps:
-            if not e.main_shift_type or e.is_dual_worker:
-                continue
-            for d in days:
-                for p in pats:
-                    if p.code == e.main_shift_type or p.category == e.main_shift_type:
-                        main_shift_bonus_terms.append(x[(e.id, d, p.id)])
+        # 廃止(ADR-0002): メインシフト区分への「寄せ」ボーナスも撤廃した（配置制御は
+        # 勤務可能時間帯に一本化）。挙動の由来を追えるよう、旧ロジックはコメントで残す。
+        # main_shift_bonus_terms: list[cp_model.IntVar] = []
+        # for e in emps:
+        #     if not e.main_shift_type or e.is_dual_worker:
+        #         continue
+        #     for d in days:
+        #         for p in pats:
+        #             if p.code == e.main_shift_type or p.category == e.main_shift_type:
+        #                 main_shift_bonus_terms.append(x[(e.id, d, p.id)])
 
-        # Soft: Wワーク従業員は Wワーク専用パターン(is_basic=False)を優先する。
-        dual_wwork_bonus_terms: list[cp_model.IntVar] = []
-        for e in emps:
-            if not e.is_dual_worker:
-                continue
-            for d in days:
-                for p in pats:
-                    if not p.is_basic:
-                        dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
+        # 廃止(ADR-0004): Wワーク専用パターンへの寄せボーナスも撤廃（パターンを統合したため）。
+        # dual_wwork_bonus_terms: list[cp_model.IntVar] = []
+        # for e in emps:
+        #     if not e.is_dual_worker:
+        #         continue
+        #     for d in days:
+        #         for p in pats:
+        #             if not p.is_basic:
+        #                 dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
 
-        # Objective: minimize deviation from monthly target, reward preferences and main_shift matches.
+        # Objective: minimize deviation from monthly target and reward preferences.
         # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
         # 分配が縮退して一部の従業員が 0 枠になるため、最大負荷と最小負荷の差を縮める。
         balance = 0
@@ -405,15 +439,20 @@ class ShiftScheduler:
             obj += sum(penalties)
         if bonus_terms:
             obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
-        if main_shift_bonus_terms:
-            obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
-        if dual_wwork_bonus_terms:
-            obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
+        # 廃止(ADR-0002): メインシフト寄せボーナスは objective から除外。
+        # if main_shift_bonus_terms:
+        #     obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
+        # 廃止(ADR-0004): Wワーク寄せボーナスは objective から除外。
+        # if dual_wwork_bonus_terms:
+        #     obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
         if loads:
             obj += BALANCE_WEIGHT * balance
-        if slack_terms:
-            # カバレッジ違反は他のどの目的より優先して潰す（十分大きな重み）。
-            obj += COVERAGE_SLACK_WEIGHT * sum(slack_terms)
+        if shortage_terms:
+            # 不足は他のどの目的より優先して潰す（十分大きな重み）。
+            obj += COVERAGE_SLACK_WEIGHT * sum(shortage_terms)
+        if surplus_terms:
+            # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
+            obj += SURPLUS_WEIGHT * sum(surplus_terms)
         model.Minimize(obj)
 
         solver = cp_model.CpSolver()

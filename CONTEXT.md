@@ -14,11 +14,24 @@ _Avoid_: シフト（パターンと割当のどちらか曖昧）
 「ある従業員 × ある日 × ひとつの勤務」の具体インスタンス。生成元のパターンとは別物。
 _Avoid_: シフト（曖昧）
 
-**メインシフト (Main Shift)**:
-従業員が主に入る区分（朝/夜/深夜）。ピン留めするとハード制約になる。
+**メインシフト (Main Shift)** — _廃止 (deprecated)_:
+かつては従業員が主に入る区分（朝/夜/深夜）を指し、ピン留めでハード制約になった。配置制御は **勤務可能時間帯** に一本化され、この語彙は使わない（[ADR-0002](docs/adr/0002-main-shift-category-to-availability-window.md)）。
 
-**Wワークパターン (Dual-work Pattern)**:
-`is_basic=false` のパターン。掛け持ち従業員(dual worker)のみ配置可。基本パターンは全員に配置可。
+**勤務可能時間帯 (Availability Window)**:
+従業員が普段入れる時間帯を1時間単位で表す窓（`available_start_hour`〜`available_end_hour`）。設定するとハード制約になり、**窓に完全に収まるパターンにのみ**配置できる。未設定なら無制限。どのパターンに配置してよいかを制御する唯一の仕組み。
+
+**週シフト回数 (Weekly Shift Count)**:
+従業員が1週間（日曜起点）に入る割当の回数（`weekly_shifts`）。`weekly_shifts_pinned` が真の従業員は、完全な7日週で「ちょうどこの回数」を守るハード制約になる（半端な週はソフト按分）。必要人数と競合する週は、過剰配置を避けるため週回数を先にソフトへ落とす（[ADR-0003](docs/adr/0003-weekly-shift-count-hard-constraint.md)）。
+_Avoid_: メインシフト（廃止語）
+
+**許容過剰 (Surplus Tolerance, α)**:
+各時間に必要人数を超えて配置してよい上限（α）。`必要人数 ≤ 配置 ≤ 必要人数 + α`。短い勤務可能時間帯の従業員なども +α の枠で配置できる。既定 α=1（[ADR-0005](docs/adr/0005-coverage-surplus-tolerance.md)）。
+
+**Wワークパターン (Dual-work Pattern)** — _廃止 (deprecated)_:
+かつては `is_basic=false` の掛け持ち専用パターンを指した。基本/Wワークのパターン区別は撤廃され、全パターンは1つのプールに統合された。配置制限は **勤務可能時間帯** のみ（[ADR-0004](docs/adr/0004-unify-shift-patterns.md)）。
+
+**Wワーク従業員 (Dual Worker)**:
+掛け持ち（複数の職を持つ）従業員の目印（`is_dual_worker`）。現在はシフト生成の配置には影響しない属性ラベル。
 
 ### 勤務時間 (Working Time)
 

@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
-import type { Availability, AvailabilityKind, Employee } from '@/types'
+import type { Availability, AvailabilityKind, Employee, PairConstraint } from '@/types'
 
 interface State {
   employees: Employee[]
@@ -52,6 +52,21 @@ export const useEmployeeStore = defineStore('employee', {
     },
     async deleteAvailability(id: number) {
       await api.delete(`/employees/availabilities/${id}`)
+    },
+    // NGペア（一緒に入れたくない相手）。対称なので (a,b) 片方だけ持てばよい。
+    async listPairs(): Promise<PairConstraint[]> {
+      const { data } = await api.get<PairConstraint[]>('/pair-constraints')
+      return data
+    },
+    async createPair(aId: number, bId: number): Promise<PairConstraint> {
+      const { data } = await api.post<PairConstraint>('/pair-constraints', {
+        employee_a_id: aId,
+        employee_b_id: bId,
+      })
+      return data
+    },
+    async deletePair(id: number) {
+      await api.delete(`/pair-constraints/${id}`)
     },
   },
 })

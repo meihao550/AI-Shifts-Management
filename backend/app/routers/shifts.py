@@ -137,9 +137,8 @@ async def generate_shift(
                 id=e.id,
                 name=e.name,
                 weekly_target=e.weekly_shifts,
-                main_shift_type=e.main_shift_type,
                 hourly_wage=e.hourly_wage,
-                main_shift_pinned=e.main_shift_pinned,
+                weekly_shifts_pinned=e.weekly_shifts_pinned,
                 is_dual_worker=e.is_dual_worker,
                 available_start=e.available_start_hour,
                 available_end=e.available_end_hour,
@@ -154,7 +153,6 @@ async def generate_shift(
                 start=p.start_time,
                 end=p.end_time,
                 category=p.category,
-                is_basic=p.is_basic,
                 rest_minutes=p.rest_minutes,
             )
             for p in patterns

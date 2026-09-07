@@ -4,7 +4,8 @@
 満たせない場合はスラック付き診断ソルブで不足時間帯を warning に出す。
 """
 
-from datetime import time
+from collections import defaultdict
+from datetime import time, timedelta
 
 from app.services.scheduler import (
     EmployeeSpec,
@@ -15,12 +16,13 @@ from app.services.scheduler import (
 
 
 def _employee(emp_id: int, name: str) -> EmployeeSpec:
+    # 週回数固定は既定 OFF にして、カバレッジ/平準化など各テストの主眼を邪魔しないようにする。
     return EmployeeSpec(
         id=emp_id,
         name=name,
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
     )
 
 
@@ -32,7 +34,6 @@ def _pattern(pattern_id: int, code: str, category: str, start: time, end: time) 
         start=start,
         end=end,
         category=category,
-        is_basic=True,
     )
 
 
@@ -174,103 +175,92 @@ def test_load_is_balanced_across_employees():
     assert max(values) - min(values) <= 2  # 偏りが小さい
 
 
-def test_pinned_employee_only_gets_main_category():
-    """メイン固定(ピン)した従業員は、メイン区分以外には配置されない（絶対遵守）。"""
-    a = EmployeeSpec(
-        id=1,
-        name="A",
-        weekly_target=7,
-        main_shift_type="morning",
-        hourly_wage=1000,
-        main_shift_pinned=True,
-    )
-    b = EmployeeSpec(id=2, name="B", weekly_target=7, main_shift_type=None, hourly_wage=1000)
+def test_weekly_pinned_exact_when_feasible():
+    """需要と週回数が両立するとき、pinned 従業員は完全週でちょうど weekly_target 回入る。
+
+    2026年2月は日曜始まりの完全4週。7人×週1回で、朝は毎日1人 → 各人ちょうど週1回で
+    全日を過不足なくカバーできる（第1段で両方ハードが解ける）。
+    """
+    emps = [
+        EmployeeSpec(
+            id=i, name=f"E{i}", weekly_target=1, hourly_wage=1000, weekly_shifts_pinned=True
+        )
+        for i in range(1, 8)
+    ]
     result = _make_scheduler(
-        patterns=[MORNING, EVENING],
-        staffing_rules=_hourly((MORNING_HOURS, 1), (EVENING_HOURS, 1)),
-        employees=[a, b],
-    ).solve()
-    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-
-    code_to_category = {MORNING.code: MORNING.category, EVENING.code: EVENING.category}
-    for asg in result.assignments:
-        if asg["employee_id"] == 1:  # ピンした A はメイン区分(morning)のみ
-            assert code_to_category[asg["shift_type"]] == "morning"
-
-
-def test_dual_worker_pattern_only_for_dual_workers():
-    """Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに割り当てられる。"""
-    w_pattern = PatternSpec(
-        id=3,
-        code="w_20_01",
-        label="Wワーク 20:00-01:00",
-        start=time(20, 0),
-        end=time(1, 0),
-        category="evening",
-        is_basic=False,  # ← Wワーク専用
-    )
-    normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
-    )
-    dual = EmployeeSpec(
-        id=2,
-        name="Wワーク",
-        weekly_target=7,
-        main_shift_type=None,
-        hourly_wage=1000,
-        is_dual_worker=True,
-    )
-    # 20-24時台に 1 人必要 → Wワーク専用パターンでしか埋められない。
-    result = _make_scheduler(
-        patterns=[MORNING, w_pattern],
-        staffing_rules=_hourly((range(20, 25), 1)),
-        employees=[normal, dual],
-    ).solve()
-    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-
-    # Wワーク専用パターンに入っているのはWワーク従業員(id=2)だけ
-    for a in result.assignments:
-        if a["shift_type"] == "w_20_01":
-            assert a["employee_id"] == 2
-
-
-def test_peaked_requirement_forces_wwork_pattern_for_dual_worker():
-    """ピーク帯を基本パターンでは過剰になる形にすると、Wワーク専用パターンが
-    使われ、それは Wワーク従業員にのみ割り当てられる（方針B: ピーク運用）。"""
-    w_1017 = PatternSpec(
-        id=3,
-        code="w_1017",
-        label="Wワーク 10:00-17:00",
-        start=time(10, 0),
-        end=time(17, 0),
-        category="morning",
-        is_basic=False,  # ← Wワーク専用（通常従業員は不可）
-    )
-    normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, main_shift_type=None, hourly_wage=1000
-    )
-    dual = EmployeeSpec(
-        id=2,
-        name="Wワーク",
-        weekly_target=7,
-        main_shift_type=None,
-        hourly_wage=1000,
-        is_dual_worker=True,
-    )
-    # 9時=1（基本 MORNING が1枚）/ 10-16時=2（ピーク +1）。
-    # ピークの+1は 9時を過剰にせず埋める必要があり、10-17(W) でしか埋まらない。
-    result = _make_scheduler(
-        patterns=[MORNING, w_1017],
-        staffing_rules=_hourly((range(9, 10), 1), (range(10, 17), 2)),
-        employees=[normal, dual],
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=emps,
     ).solve()
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert not any("不足" in w for w in result.warnings)
 
-    # Wワーク専用パターンが実際に使われ、かつ Wワーク従業員(id=2)のみが入る
-    w_assigns = [a for a in result.assignments if a["shift_type"] == "w_1017"]
-    assert w_assigns, "ピークを埋めるために Wワークパターンが使われるはず"
-    assert all(a["employee_id"] == 2 for a in w_assigns)
+    # 各週(日曜起点)・各人ちょうど1回
+    per_week: dict[tuple[int, object], int] = defaultdict(int)
+    for a in result.assignments:
+        d = a["target_date"]
+        week_start = d - timedelta(days=(d.weekday() + 1) % 7)
+        per_week[(a["employee_id"], week_start)] += 1
+    assert per_week
+    assert all(c == 1 for c in per_week.values())
+
+
+def test_overstaffing_capped_at_alpha(monkeypatch):
+    """供給過多でも過剰配置は各時間「必要人数 + α」で頭打ちになる（ADR-0005）。
+
+    3人が全員「週7回(毎日)」固定だが、朝は毎日1人しか要らない。α=1 なので各時間は
+    最大2人まで。以前の「1枠に殺到」のような暴走は起きない。週回数(ちょうど7)は
+    満たせないのでその旨を警告する。
+    """
+    from app.services import scheduler as sched
+
+    monkeypatch.setattr(sched, "SURPLUS_TOLERANCE", 1)
+    emps = [
+        EmployeeSpec(
+            id=i, name=f"E{i}", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=True
+        )
+        for i in range(1, 4)
+    ]
+    result = _make_scheduler(
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=emps,
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    # どの(日,時)も必要人数(1) + α(1) = 2 を超えない
+    coverage: dict[tuple[object, int], int] = defaultdict(int)
+    for a in result.assignments:
+        for h in _pattern_hours(a["start_time"], a["end_time"]):
+            coverage[(a["target_date"], h)] += 1
+    assert coverage
+    assert all(n <= 2 for n in coverage.values())
+    # 週回数(ちょうど7)は満たせないので警告が出る
+    assert any("週回数" in w for w in result.warnings)
+
+
+def test_any_employee_can_use_any_pattern():
+    """パターン統合(ADR-0004): 基本/Wワークの区別が無くなり、通常従業員でも
+    どのパターンにも入れる（配置制限は勤務可能時間帯のみ）。"""
+    late = PatternSpec(
+        id=3,
+        code="w_20_01",
+        label="20:00-01:00",
+        start=time(20, 0),
+        end=time(1, 0),
+        category="evening",
+    )
+    normal = EmployeeSpec(
+        id=1, name="通常", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
+    )
+    # 20-24時台に1人必要。以前は「Wワーク専用」で通常従業員は入れなかったが、今は入れる。
+    result = _make_scheduler(
+        patterns=[MORNING, late],
+        staffing_rules=_hourly((range(20, 25), 1)),
+        employees=[normal],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert any(a["shift_type"] == "w_20_01" for a in result.assignments)
 
 
 def test_staffing_shortage_recommends_hiring():
@@ -294,14 +284,80 @@ def test_window_hours_helper():
     assert _window_hours(18, 2) == set(range(18, 26))
 
 
+def test_windowed_employee_uses_fitting_pattern():
+    """窓(9-16)を持つ通常従業員は、窓に収まるパターンに入れる（配置制限は窓のみ）。"""
+    part_time = PatternSpec(
+        id=3,
+        code="p_0900_1600",
+        label="09:00-16:00",
+        start=time(9, 0),
+        end=time(16, 0),
+        category="morning",
+    )
+    emp = EmployeeSpec(
+        id=1,
+        name="A",
+        weekly_target=7,
+        hourly_wage=1000,
+        weekly_shifts_pinned=False,
+        available_start=9,
+        available_end=16,
+    )
+    result = _make_scheduler(
+        patterns=[MORNING, part_time],  # MORNING(9-17,基本)は窓外
+        staffing_rules=_hourly((range(9, 16), 1)),  # 9:00-16:00 に1人
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # 窓に収まる非基本パターンで実際に配置される（1枠も入れない状態にならない）
+    assert result.assignments
+    assert all(a["shift_type"] == "p_0900_1600" for a in result.assignments)
+
+
+def test_short_window_employee_scheduled_with_surplus_tolerance():
+    """短い窓(9-15)の従業員が、実需要(16時台あり)でも配置される（ADR-0005: α=1）。
+
+    9-15の人は9-14しか埋められない。16時台を埋める9-17の人が9-14も満たすため、
+    == だと過剰になり入れなかった。α=1 なら9-14を+1にして入れられる。
+    """
+    short = _pattern(3, "p_0900_1500", "morning", time(9, 0), time(15, 0))
+    full_timer = EmployeeSpec(
+        id=1, name="Full", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
+    )
+    part_timer = EmployeeSpec(
+        id=2,
+        name="Part",
+        weekly_target=7,
+        hourly_wage=1000,
+        weekly_shifts_pinned=False,
+        available_start=9,
+        available_end=15,
+    )
+    # 朝の各時間(9-16)に1人必要（16時台も需要あり）。
+    result = _make_scheduler(
+        patterns=[MORNING, short],
+        staffing_rules=_hourly((range(9, 17), 1)),
+        employees=[full_timer, part_timer],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # 9-15の人が実際に配置される（1枠も入れない状態にならない）
+    assert any(a["employee_id"] == 2 for a in result.assignments)
+    # 過剰は各時間 必要人数+α(=2) まで
+    coverage: dict[tuple[object, int], int] = defaultdict(int)
+    for a in result.assignments:
+        for h in _pattern_hours(a["start_time"], a["end_time"]):
+            coverage[(a["target_date"], h)] += 1
+    assert all(n <= 2 for n in coverage.values())
+
+
 def test_available_window_blocks_out_of_window_pattern():
     """窓 9-17 の従業員は、窓に収まらない夜勤(17-1)には配置されない。"""
     emp = EmployeeSpec(
         id=1,
         name="A",
         weekly_target=7,
-        main_shift_type=None,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
         available_start=9,
         available_end=17,
     )

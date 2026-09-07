@@ -39,15 +39,15 @@ class Employee(Base):
     transport_cost: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # 時給 (JPY)
     hourly_wage: Mapped[int] = mapped_column(Integer, default=1100, nullable=False)
-    # メインで入るシフト種別 (morning/evening/night 等)
-    main_shift_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    # メインシフトを絶対遵守（ピン）。True ならメイン区分のみに配置するハード制約にする
-    main_shift_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # メインシフト区分(朝/夜/深夜)は廃止(ADR-0002)。配置制御は勤務可能時間帯に一本化。
     # Wワーク（掛け持ち）従業員か。True なら基本+Wワーク専用パターンの両方に入れる。
     # False（通常従業員）は基本パターンのみ（Wワーク専用パターンには配置しない）。
     is_dual_worker: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 週に何回入るか
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    # 週回数を「完全週でちょうど weekly_shifts 回」のハード制約にするか(ADR-0003)。
+    # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト。
+    weekly_shifts_pinned: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # 有給
     paid_leave_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。

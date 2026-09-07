@@ -10,12 +10,11 @@ class ShiftPatternBase(BaseModel):
     label: str
     start_time: time
     end_time: time
-    is_basic: bool = True
     category: str  # morning | evening | night
     rest_minutes: int = 0  # 休憩時間（分）
 
 
-# 追加は「時刻(開始-終了)+休憩」だけ。コード/表示名/区分/is_basic はサーバ側で自動生成する
+# 追加は「時刻(開始-終了)+休憩」だけ。コード/表示名/区分はサーバ側で自動生成する
 # （ユーザーにコードや区分を入力させない。要件10.5）。
 class ShiftPatternCreate(BaseModel):
     start_time: time

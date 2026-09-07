@@ -63,7 +63,6 @@ def default_patterns() -> list[dict]:
             "label": "朝 09:00-17:00",
             "start_time": time(9, 0),
             "end_time": time(17, 0),
-            "is_basic": True,
             "category": "morning",
         },
         {
@@ -71,7 +70,6 @@ def default_patterns() -> list[dict]:
             "label": "夜 17:00-01:00",
             "start_time": time(17, 0),
             "end_time": time(1, 0),
-            "is_basic": True,
             "category": "evening",
         },
         {
@@ -79,7 +77,6 @@ def default_patterns() -> list[dict]:
             "label": "深夜 01:00-09:00",
             "start_time": time(1, 0),
             "end_time": time(9, 0),
-            "is_basic": True,
             "category": "night",
         },
     ]
@@ -92,7 +89,6 @@ def default_patterns() -> list[dict]:
                 "label": make_pattern_label(st, et),
                 "start_time": st,
                 "end_time": et,
-                "is_basic": False,
                 "category": infer_category(st, et),
             }
         )

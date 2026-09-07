@@ -19,15 +19,22 @@ export interface Employee {
   paid_leave_amount: number
   transport_cost: number
   hourly_wage: number
-  main_shift_type: string | null
-  main_shift_pinned: boolean
   is_dual_worker: boolean
   weekly_shifts: number
+  // 週回数を完全週でちょうど weekly_shifts 回のハード制約にするか(ADR-0003)。新規は既定 true。
+  weekly_shifts_pinned: boolean
   role: UserRole
   active: boolean
   // 普段入れる時間帯（1時間単位, 0〜24）。両方 null なら制限なし。
   available_start_hour: number | null
   available_end_hour: number | null
+}
+
+// 一緒に入れたくない従業員のペア（対称。scheduler がハード制約で同時勤務を禁止）
+export interface PairConstraint {
+  id: number
+  employee_a_id: number
+  employee_b_id: number
 }
 
 export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
@@ -47,7 +54,6 @@ export interface ShiftPattern {
   label: string
   start_time: string
   end_time: string
-  is_basic: boolean
   category: string
   rest_minutes: number
 }

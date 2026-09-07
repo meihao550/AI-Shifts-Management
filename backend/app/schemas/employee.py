@@ -11,10 +11,10 @@ class EmployeeBase(BaseModel):
     age: int | None = Field(default=None, ge=15, le=99)
     transport_cost: int = Field(default=0, ge=0)
     hourly_wage: int = Field(default=1100, ge=0)
-    main_shift_type: str | None = None
-    main_shift_pinned: bool = False
     is_dual_worker: bool = False
     weekly_shifts: int = Field(default=3, ge=0, le=7)
+    # 週回数を完全週でちょうど weekly_shifts 回のハード制約にするか(ADR-0003)。新規は既定 True。
+    weekly_shifts_pinned: bool = True
     role: EmployeeRole = EmployeeRole.employee
     active: bool = True
     paid_leave_amount: int = Field(default=0, ge=0)
@@ -34,10 +34,9 @@ class EmployeeUpdate(BaseModel):
     transport_cost: int | None = Field(default=None, ge=0)
     hourly_wage: int | None = Field(default=None, ge=0)
     paid_leave_amount: int | None = Field(default=None, ge=0)
-    main_shift_type: str | None = None
-    main_shift_pinned: bool | None = None
     is_dual_worker: bool | None = None
     weekly_shifts: int | None = Field(default=None, ge=0, le=7)
+    weekly_shifts_pinned: bool | None = None
     role: EmployeeRole | None = None
     active: bool | None = None
     available_start_hour: int | None = Field(default=None, ge=0, le=24)

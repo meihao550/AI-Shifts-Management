@@ -6,14 +6,13 @@ from datetime import time
 from enum import StrEnum
 
 from sqlalchemy import (
-    Boolean,
+    Enum as SAEnum,
+)
+from sqlalchemy import (
     Integer,
     String,
     Time,
     UniqueConstraint,
-)
-from sqlalchemy import (
-    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,7 +35,7 @@ class ShiftPattern(Base):
     label: Mapped[str] = mapped_column(String(64), nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
-    is_basic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # is_basic(基本/Wワークの区別)は廃止(ADR-0004)。全パターンを1プールに統合。
     # morning/evening/night: high-level bucket used for staffing constraints
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     # 休憩時間（分）。労働時間・給与計算での控除に使う想定。0=休憩なし。
