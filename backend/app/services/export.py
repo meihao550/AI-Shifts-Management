@@ -20,6 +20,10 @@ from app.models.employee import Employee
 from app.models.shift import ShiftAssignment
 from app.services.holidays import is_holiday
 
+# 従業員名列の幅(pt)。6pt フォントで全角約10文字ぶん。苗字のみの運用を想定。
+# 日付列はここを引いた残りを等分するので、増やすと日付列が細くなる。
+NAME_COL_WIDTH = 64
+
 
 def _register_jp_font() -> str:
     try:
@@ -80,7 +84,9 @@ def export_pdf(
     story.append(Spacer(1, 12))
 
     days, rows = _build_grid(year, month, assignments, employees)
-    table = Table(rows, colWidths=[64] + [(doc.width - 64) / len(days)] * len(days), repeatRows=1)
+    # 列幅は doc.width に必ず収める。未指定だと reportlab が内容に合わせて列を広げ、A4 横(841.89pt)をはみ出して右側が切れる。
+    day_col_width = (doc.width - NAME_COL_WIDTH) / len(days)
+    table = Table(rows, colWidths=[NAME_COL_WIDTH] + [day_col_width] * len(days), repeatRows=1)
     style = TableStyle(
         [
             ("FONTNAME", (0, 0), (-1, -1), font_name),
