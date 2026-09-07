@@ -30,6 +30,13 @@ export interface Employee {
   available_end_hour: number | null
 }
 
+// 一緒に入れたくない従業員のペア（対称。scheduler がハード制約で同時勤務を禁止）
+export interface PairConstraint {
+  id: number
+  employee_a_id: number
+  employee_b_id: number
+}
+
 export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
 
 export interface Availability {

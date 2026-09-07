@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import {
   NButton,
   NCard,
@@ -13,18 +13,76 @@ import {
   NSelect,
   NSpace,
   NSwitch,
+  NTag,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useEmployeeStore } from '@/stores/employee'
-import type { Employee } from '@/types'
+import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
 const message = useMessage()
 const showEdit = ref(false)
 const form = ref<Partial<Employee>>({})
 
-onMounted(() => store.fetchAll())
+// NGペア（一緒に入れたくない相手）。全ペアを持ち、編集中の従業員の相手を導出する。
+const pairs = ref<PairConstraint[]>([])
+const ngToAdd = ref<number | null>(null)
+
+async function loadPairs() {
+  pairs.value = await store.listPairs()
+}
+
+onMounted(async () => {
+  await store.fetchAll()
+  await loadPairs()
+})
+
+function empName(id: number): string {
+  return store.employees.find((e) => e.id === id)?.name ?? `#${id}`
+}
+
+// 編集中の従業員のNGペア相手（対称なので相手側のIDを取り出す）
+const ngPartners = computed(() => {
+  const id = form.value.id
+  if (!id) return [] as { pairId: number; empId: number }[]
+  return pairs.value
+    .filter((p) => p.employee_a_id === id || p.employee_b_id === id)
+    .map((p) => ({
+      pairId: p.id,
+      empId: p.employee_a_id === id ? p.employee_b_id : p.employee_a_id,
+    }))
+})
+
+// 追加候補（自分自身と既存の相手を除く）
+const ngCandidateOptions = computed(() => {
+  const id = form.value.id
+  const taken = new Set(ngPartners.value.map((pp) => pp.empId))
+  return store.employees
+    .filter((e) => e.id !== id && !taken.has(e.id))
+    .map((e) => ({ label: e.name, value: e.id }))
+})
+
+async function onAddNg(otherId: number | null) {
+  if (!otherId || !form.value.id) return
+  try {
+    await store.createPair(form.value.id, otherId)
+    await loadPairs()
+  } catch (e) {
+    message.error(`NGペア追加失敗: ${(e as Error).message}`)
+  } finally {
+    ngToAdd.value = null
+  }
+}
+
+async function removeNgPair(pairId: number) {
+  try {
+    await store.deletePair(pairId)
+    await loadPairs()
+  } catch (e) {
+    message.error(`NGペア削除失敗: ${(e as Error).message}`)
+  }
+}
 
 // メインシフト区分(朝/夜/深夜)は廃止(ADR-0002)。配置制御は「普段入れる時間」に一本化。
 
@@ -210,6 +268,40 @@ async function remove(id: number) {
         </NFormItem>
         <p style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
           1時間刻み。空欄で制限なし。この時間内に収まるシフトにだけ生成配置します（終了が開始以前なら翌日扱い）。
+        </p>
+        <NFormItem label="NGペア">
+          <template v-if="form.id">
+            <NSpace vertical size="small" style="width: 100%">
+              <NSpace size="small" :wrap="true">
+                <NTag
+                  v-for="pp in ngPartners"
+                  :key="pp.pairId"
+                  closable
+                  type="warning"
+                  @close="removeNgPair(pp.pairId)"
+                >
+                  {{ empName(pp.empId) }}
+                </NTag>
+                <span v-if="!ngPartners.length" style="color: var(--ink-3); font-size: 12px">
+                  なし
+                </span>
+              </NSpace>
+              <NSelect
+                v-model:value="ngToAdd"
+                :options="ngCandidateOptions"
+                placeholder="一緒に入れたくない相手を追加"
+                filterable
+                clearable
+                @update:value="onAddNg"
+              />
+            </NSpace>
+          </template>
+          <span v-else style="color: var(--ink-3); font-size: 12px">
+            保存後、「編集」から設定できます
+          </span>
+        </NFormItem>
+        <p v-if="form.id" style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
+          同じ時間帯に一緒に入らないようシフト生成で考慮します（対称・即時保存）。
         </p>
         <NFormItem label="ロール">
           <NSelect
