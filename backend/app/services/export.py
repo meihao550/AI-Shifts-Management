@@ -40,8 +40,8 @@ def _build_grid(
 
     per_emp_day: dict[int, dict[date, list[str]]] = defaultdict(lambda: defaultdict(list))
     for a in assignments:
-        # 実時間帯で表示する（例 20:00-01:00）。深夜跨ぎもそのまま。
-        cell = f"{a.start_time.strftime('%H:%M')}-{a.end_time.strftime('%H:%M')}"
+        # 実時間帯で表示する（例 20-01）。深夜跨ぎもそのまま。
+        cell = f"{a.start_time.strftime('%H')}-{a.end_time.strftime('%H')}"
         per_emp_day[a.employee_id][a.target_date].append(cell)
 
     rows: list[list[str]] = []
@@ -63,7 +63,13 @@ def export_pdf(
 ) -> bytes:
     font_name = _register_jp_font()
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), title=f"Shift-{year}-{month:02d}")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        title=f"Shift-{year}-{month:02d}",
+        leftMargin=18,
+        rightMargin=18,
+    )
     styles = getSampleStyleSheet()
     story = []
     title = Paragraph(
@@ -74,11 +80,14 @@ def export_pdf(
     story.append(Spacer(1, 12))
 
     days, rows = _build_grid(year, month, assignments, employees)
-    table = Table(rows, repeatRows=1)
+    table = Table(rows, colWidths=[64] + [(doc.width - 64) / len(days)] * len(days), repeatRows=1)
     style = TableStyle(
         [
             ("FONTNAME", (0, 0), (-1, -1), font_name),
-            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("FONTSIZE", (0, 0), (-1, -1), 6),
+            ("LEADING", (0, 0), (-1, -1), 7),
+            ("LEFTPADDING", (0, 0), (-1, -1), 1),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 1),
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("ALIGN", (1, 1), (-1, -1), "CENTER"),
