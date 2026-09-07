@@ -20,6 +20,10 @@ from app.models.employee import Employee
 from app.models.shift import ShiftAssignment
 from app.services.holidays import is_holiday
 
+# 従業員名列の幅(pt)。6pt フォントで全角約10文字ぶん。苗字のみの運用を想定。
+# 日付列はここを引いた残りを等分するので、増やすと日付列が細くなる。
+NAME_COL_WIDTH = 64
+
 
 def _register_jp_font() -> str:
     try:
@@ -40,8 +44,8 @@ def _build_grid(
 
     per_emp_day: dict[int, dict[date, list[str]]] = defaultdict(lambda: defaultdict(list))
     for a in assignments:
-        # 実時間帯で表示する（例 20:00-01:00）。深夜跨ぎもそのまま。
-        cell = f"{a.start_time.strftime('%H:%M')}-{a.end_time.strftime('%H:%M')}"
+        # 実時間帯で表示する（例 20-01）。深夜跨ぎもそのまま。
+        cell = f"{a.start_time.strftime('%H')}-{a.end_time.strftime('%H')}"
         per_emp_day[a.employee_id][a.target_date].append(cell)
 
     rows: list[list[str]] = []
@@ -63,7 +67,13 @@ def export_pdf(
 ) -> bytes:
     font_name = _register_jp_font()
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), title=f"Shift-{year}-{month:02d}")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        title=f"Shift-{year}-{month:02d}",
+        leftMargin=18,
+        rightMargin=18,
+    )
     styles = getSampleStyleSheet()
     story = []
     title = Paragraph(
@@ -74,11 +84,16 @@ def export_pdf(
     story.append(Spacer(1, 12))
 
     days, rows = _build_grid(year, month, assignments, employees)
-    table = Table(rows, repeatRows=1)
+    # 列幅は doc.width に必ず収める。未指定だと reportlab が内容に合わせて列を広げ、A4 横(841.89pt)をはみ出して右側が切れる。
+    day_col_width = (doc.width - NAME_COL_WIDTH) / len(days)
+    table = Table(rows, colWidths=[NAME_COL_WIDTH] + [day_col_width] * len(days), repeatRows=1)
     style = TableStyle(
         [
             ("FONTNAME", (0, 0), (-1, -1), font_name),
-            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("FONTSIZE", (0, 0), (-1, -1), 6),
+            ("LEADING", (0, 0), (-1, -1), 7),
+            ("LEFTPADDING", (0, 0), (-1, -1), 1),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 1),
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("ALIGN", (1, 1), (-1, -1), "CENTER"),
