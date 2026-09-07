@@ -51,6 +51,12 @@ const columns: DataTableColumns<Employee> = [
   },
   { title: '週回数', key: 'weekly_shifts', width: 80 },
   {
+    title: '週回数固定',
+    key: 'weekly_shifts_pinned',
+    width: 90,
+    render: (r) => (r.weekly_shifts_pinned ? '○' : ''),
+  },
+  {
     title: '普段の時間',
     key: 'available_start_hour',
     width: 120,
@@ -100,6 +106,7 @@ function openCreate() {
     hourly_wage: 1200,
     is_dual_worker: false,
     weekly_shifts: 3,
+    weekly_shifts_pinned: true,
     role: 'employee',
     active: true,
     available_start_hour: null,
@@ -175,6 +182,12 @@ async function remove(id: number) {
         </NFormItem>
         <NFormItem label="週勤務回数">
           <NInputNumber v-model:value="form.weekly_shifts" :min="0" :max="7" style="width: 100%" />
+        </NFormItem>
+        <NFormItem label="週回数を固定">
+          <NSwitch v-model:value="form.weekly_shifts_pinned" />
+          <span style="margin-left: 8px; color: #8892a6; font-size: 12px">
+            ONで完全な週はちょうど週回数だけ入れる（絶対遵守。半端な週は目安）
+          </span>
         </NFormItem>
         <NFormItem label="普段入れる時間">
           <NSpace align="center" :wrap="false" style="width: 100%">

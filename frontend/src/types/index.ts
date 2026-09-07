@@ -21,6 +21,8 @@ export interface Employee {
   hourly_wage: number
   is_dual_worker: boolean
   weekly_shifts: number
+  // 週回数を完全週でちょうど weekly_shifts 回のハード制約にするか(ADR-0003)。新規は既定 true。
+  weekly_shifts_pinned: boolean
   role: UserRole
   active: boolean
   // 普段入れる時間帯（1時間単位, 0〜24）。両方 null なら制限なし。

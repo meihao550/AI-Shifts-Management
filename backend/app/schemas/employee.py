@@ -13,6 +13,8 @@ class EmployeeBase(BaseModel):
     hourly_wage: int = Field(default=1100, ge=0)
     is_dual_worker: bool = False
     weekly_shifts: int = Field(default=3, ge=0, le=7)
+    # 週回数を完全週でちょうど weekly_shifts 回のハード制約にするか(ADR-0003)。新規は既定 True。
+    weekly_shifts_pinned: bool = True
     role: EmployeeRole = EmployeeRole.employee
     active: bool = True
     paid_leave_amount: int = Field(default=0, ge=0)
@@ -34,6 +36,7 @@ class EmployeeUpdate(BaseModel):
     paid_leave_amount: int | None = Field(default=None, ge=0)
     is_dual_worker: bool | None = None
     weekly_shifts: int | None = Field(default=None, ge=0, le=7)
+    weekly_shifts_pinned: bool | None = None
     role: EmployeeRole | None = None
     active: bool | None = None
     available_start_hour: int | None = Field(default=None, ge=0, le=24)

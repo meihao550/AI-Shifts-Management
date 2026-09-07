@@ -45,6 +45,9 @@ class Employee(Base):
     is_dual_worker: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 週に何回入るか
     weekly_shifts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    # 週回数を「完全週でちょうど weekly_shifts 回」のハード制約にするか(ADR-0003)。
+    # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト。
+    weekly_shifts_pinned: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # 有給
     paid_leave_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。

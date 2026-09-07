@@ -12,8 +12,12 @@ Produce a monthly assignment that:
   * meets required staffing per (date, hour) — HARD (時間カバレッジ方式)
   * respects unavailable days — HARD
   * respects preferred days (bonus) — SOFT
-  * respects each employee's weekly shift target — SOFT
+  * respects each employee's weekly shift count — HARD for weekly_shifts_pinned
+    employees on full (7-day) weeks, otherwise SOFT (ADR-0003, 日曜起点)
   * balances load — SOFT
+
+必要人数(HARD) と 週回数(HARD) は両立しない週が出るため、solve() は
+3段フォールバックで必ず部分解を返す（詳細は solve() のdocstring参照）。
 """
 
 from __future__ import annotations
@@ -62,6 +66,9 @@ class EmployeeSpec:
     name: str
     weekly_target: int  # 週に何回入りたいか
     hourly_wage: int
+    # True なら「完全な7日週でちょうど weekly_target 回」をハード制約にする(ADR-0003)。
+    # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト、False は常にソフト。
+    weekly_shifts_pinned: bool = True
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
     # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
     available_start: int | None = None
@@ -151,25 +158,45 @@ class ShiftScheduler:
         return out
 
     def solve(self) -> SchedulerResult:
-        """まず「各時間ちょうど(==)」のハード制約で解く。
+        """3段フォールバックで必ず部分解を返す(ADR-0003)。
 
-        解が無い(INFEASIBLE)場合は、時間カバレッジをスラック(不足/過剰)付きに緩めて
-        再ソルブし、どの時間帯が満たせないかを診断しつつ暫定シフトを返す(要件書 OPT-06)。
+        第1段: 週回数(完全週=ちょうど, ハード) ＋ 必要人数(==, ハード) の両方で解く。
+        第2段: 解が無ければ、週回数はハード維持のまま必要人数をスラック(不足/過剰)化し、
+               どの時間帯が満たせないかを診断しつつ暫定シフトを返す。
+        第3段: それでも解が無い(＝週回数のハード自体が不可能)なら、週回数を目標(ソフト)に
+               緩めて解き、週回数を満たせなかった旨を警告する。
+        いずれの場合も割当は返し、後から手動修正する運用を前提とする(要件書 OPT-06)。
         """
-        hard = self._solve_once(use_slack=False)
-        if hard.solver_status != "INFEASIBLE":
-            return hard
+        # 第1段: 両方ハード
+        p1 = self._solve_once(use_slack=False, weekly_hard=True)
+        if p1.solver_status != "INFEASIBLE":
+            return p1
 
-        diag = self._solve_once(use_slack=True)
-        diag.warnings.insert(
+        # 第2段: 必要人数をスラック化（週回数はハード維持）
+        p2 = self._solve_once(use_slack=True, weekly_hard=True)
+        if p2.solver_status in ("OPTIMAL", "FEASIBLE"):
+            p2.warnings.insert(
+                0,
+                "各時間ちょうどの必要人数を満たす解がないため、不足を許容した暫定シフトを表示します。"
+                "必要人数・シフトパターン・希望を見直してください。",
+            )
+            return p2
+
+        # 第3段: 週回数もハードでは満たせないため、週回数を目標(ソフト)に緩める
+        p3 = self._solve_once(use_slack=True, weekly_hard=False)
+        p3.warnings.insert(
             0,
-            "各時間ちょうどの必要人数を満たす解がないため、不足を許容した暫定シフトを表示します。"
-            "必要人数・シフトパターン・希望を見直してください。",
+            "一部の従業員は希望の週回数(ハード)を満たせないため、週回数を目標(ソフト)に緩めた"
+            "暫定シフトを表示します。対象者の勤務可能時間帯・休み・必要人数を見直してください。",
         )
-        return diag
+        p3.warnings.insert(
+            1,
+            "各時間ちょうどの必要人数も満たせないため、不足を許容しています。",
+        )
+        return p3
 
     # 制約をつくる
-    def _solve_once(self, use_slack: bool) -> SchedulerResult:
+    def _solve_once(self, use_slack: bool, weekly_hard: bool) -> SchedulerResult:
         warnings: list[str] = []
         model = cp_model.CpModel()
 
@@ -286,19 +313,30 @@ class ShiftScheduler:
             week_start = d - timedelta(days=(d.weekday() + 1) % 7)
             weeks.setdefault(week_start, []).append(d)
 
-        # Constraint: 月間の目標(週回数×週数)に近づける(ソフト)。分配の均等化は後段の balance で。
+        # Constraint: 週回数の目標（日曜起点の週ごと。ADR-0003）。
+        # weekly_shifts_pinned な従業員は「完全な7日週でちょうど weekly 回」をハード制約に
+        # する（weekly_hard=True のときのみ。第3段フォールバックでは False で全てソフト化）。
+        # 半端な週(月末月初)は常に按分ソフト、非 pinned も常にソフト。均等化は後段の balance で。
         penalties: list[cp_model.IntVar] = []
         loads: list[Any] = []
         for e in emps:
             weekly = max_shifts_override.get(e.id, e.weekly_target)
-            monthly_target = max(0, weekly * (len(days) // 7 + (1 if len(days) % 7 else 0)))
-            total = sum(x[(e.id, d, p.id)] for d in days for p in pats)
-            loads.append(total)
-            over = model.NewIntVar(0, len(days), f"over_e{e.id}")
-            under = model.NewIntVar(0, monthly_target, f"under_e{e.id}")
-            model.Add(total - monthly_target == over - under)
-            penalties.append(over)
-            penalties.append(under)
+            # balance 用の月間ロードは従来どおり全日の合計で持つ
+            loads.append(sum(x[(e.id, d, p.id)] for d in days for p in pats))
+            for wstart, wdays in weeks.items():
+                week_total = sum(x[(e.id, d, p.id)] for d in wdays for p in pats)
+                is_full_week = len(wdays) == 7
+                if weekly_hard and e.weekly_shifts_pinned and is_full_week:
+                    # Hard: 完全週はちょうど weekly 回（絶対遵守）
+                    model.Add(week_total == weekly)
+                    continue
+                # Soft: 目標との偏差を最小化。半端な週は日数で按分する。
+                target = weekly if is_full_week else round(weekly * len(wdays) / 7)
+                over = model.NewIntVar(0, len(wdays), f"over_e{e.id}_w{wstart.isoformat()}")
+                under = model.NewIntVar(0, max(0, target), f"under_e{e.id}_w{wstart.isoformat()}")
+                model.Add(week_total - target == over - under)
+                penalties.append(over)
+                penalties.append(under)
 
         # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
         # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、

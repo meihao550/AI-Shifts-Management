@@ -4,7 +4,8 @@
 満たせない場合はスラック付き診断ソルブで不足時間帯を warning に出す。
 """
 
-from datetime import time
+from collections import defaultdict
+from datetime import time, timedelta
 
 from app.services.scheduler import (
     EmployeeSpec,
@@ -15,11 +16,13 @@ from app.services.scheduler import (
 
 
 def _employee(emp_id: int, name: str) -> EmployeeSpec:
+    # 週回数固定は既定 OFF にして、カバレッジ/平準化など各テストの主眼を邪魔しないようにする。
     return EmployeeSpec(
         id=emp_id,
         name=name,
         weekly_target=7,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
     )
 
 
@@ -173,6 +176,38 @@ def test_load_is_balanced_across_employees():
     assert max(values) - min(values) <= 2  # 偏りが小さい
 
 
+def test_weekly_pinned_employee_gets_exact_count_per_full_week():
+    """週回数固定(ピン)の従業員は、完全な7日週でちょうど weekly_target 回入る(ADR-0003)。
+
+    2026年2月は日曜始まりの完全4週(2/1〜2/28)。朝は毎日1人必要で1人では
+    埋めきれないが、週ちょうど2回(ハード)は必ず守られ、不足は警告で報告される。
+    """
+    emp = EmployeeSpec(
+        id=1,
+        name="A",
+        weekly_target=2,
+        hourly_wage=1000,
+        weekly_shifts_pinned=True,
+    )
+    result = _make_scheduler(
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    # 日曜起点の週ごとの割当回数を数える
+    week_counts: dict[object, int] = defaultdict(int)
+    for a in result.assignments:
+        d = a["target_date"]
+        week_start = d - timedelta(days=(d.weekday() + 1) % 7)
+        week_counts[week_start] += 1
+    assert len(week_counts) == 4  # 2026年2月は完全4週
+    assert all(c == 2 for c in week_counts.values())  # 各週ちょうど2回
+    # 必要人数(毎日1人)は満たせないので不足の警告が出る
+    assert any("不足" in w for w in result.warnings)
+
+
 def test_dual_worker_pattern_only_for_dual_workers():
     """Wワーク専用パターン(is_basic=False)は、Wワーク従業員のみに割り当てられる。"""
     w_pattern = PatternSpec(
@@ -185,13 +220,14 @@ def test_dual_worker_pattern_only_for_dual_workers():
         is_basic=False,  # ← Wワーク専用
     )
     normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, hourly_wage=1000
+        id=1, name="通常", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
     )
     dual = EmployeeSpec(
         id=2,
         name="Wワーク",
         weekly_target=7,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
         is_dual_worker=True,
     )
     # 20-24時台に 1 人必要 → Wワーク専用パターンでしか埋められない。
@@ -221,13 +257,14 @@ def test_peaked_requirement_forces_wwork_pattern_for_dual_worker():
         is_basic=False,  # ← Wワーク専用（通常従業員は不可）
     )
     normal = EmployeeSpec(
-        id=1, name="通常", weekly_target=7, hourly_wage=1000
+        id=1, name="通常", weekly_target=7, hourly_wage=1000, weekly_shifts_pinned=False
     )
     dual = EmployeeSpec(
         id=2,
         name="Wワーク",
         weekly_target=7,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
         is_dual_worker=True,
     )
     # 9時=1（基本 MORNING が1枚）/ 10-16時=2（ピーク +1）。
@@ -274,6 +311,7 @@ def test_available_window_blocks_out_of_window_pattern():
         name="A",
         weekly_target=7,
         hourly_wage=1000,
+        weekly_shifts_pinned=False,
         available_start=9,
         available_end=17,
     )
