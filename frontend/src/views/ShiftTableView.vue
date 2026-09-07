@@ -48,6 +48,10 @@ const availabilityForm = ref<{
 
 const loading = ref(false)
 
+// 直近の生成で返ってきた警告（人数不足・週回数を満たせない等）。トーストで一瞬出すのではなく
+// シフト表の上に出し続ける。生成のたびに更新し、別の月を読み込んだらクリアする。
+const genWarnings = ref<string[]>([])
+
 // 手動編集用のドラフト（保存されるまではこちらを表示・編集する）
 const draft = ref<ShiftAssignment[]>([])
 const dirty = ref(false)
@@ -342,6 +346,8 @@ async function saveShift() {
 }
 
 async function loadShift() {
+  // 別の月・再読み込み時は前回生成の警告を消す（その月のものではないため）
+  genWarnings.value = []
   loading.value = true
   try {
     await Promise.all([shiftStore.fetch(year.value, month.value), loadPaidLeave()])
@@ -360,8 +366,9 @@ async function generate() {
       use_llm: useLLM.value,
     })
     await loadPaidLeave()
+    genWarnings.value = res.warnings
     if (res.warnings.length) {
-      message.warning(res.warnings.join(' / '))
+      message.warning(`シフトを生成しました（注意 ${res.warnings.length} 件。表の上に表示中）`)
     } else {
       message.success(`シフトを生成しました (${res.solver_seconds}s / ${res.solver_status})`)
     }
@@ -460,6 +467,18 @@ function goPrint() {
         </NSpace>
       </template>
       <NSpin :show="loading || shiftStore.generating">
+        <NAlert
+          v-if="genWarnings.length"
+          type="warning"
+          title="シフト生成の注意"
+          closable
+          style="margin-bottom: 12px"
+          @close="genWarnings = []"
+        >
+          <ul class="gen-warning-list">
+            <li v-for="(w, i) in genWarnings" :key="i">{{ w }}</li>
+          </ul>
+        </NAlert>
         <NAlert v-if="!shift" type="info">
           このシフトはまだ作成されていません。上の「シフトを生成」から作成できます。
         </NAlert>
@@ -678,6 +697,14 @@ function goPrint() {
   margin: 8px 0 0;
   font-size: 11px;
   color: var(--ink-3);
+}
+.gen-warning-list {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .legend {
   margin: 12px 2px 0;
