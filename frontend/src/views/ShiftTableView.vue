@@ -54,7 +54,6 @@ const genWarnings = ref<string[]>([])
 
 // 手動編集用のドラフト（保存されるまではこちらを表示・編集する）
 const draft = ref<ShiftAssignment[]>([])
-const dirty = ref(false)
 
 // 当月の有給（従業員×日付）。カレンダー/セルから登録され、即時に永続化する。
 const paidLeaveList = ref<Availability[]>([])
@@ -78,7 +77,6 @@ watch(
   () => shiftStore.shift,
   (s) => {
     draft.value = s ? s.assignments.map((a) => ({ ...a })) : []
-    dirty.value = false
   },
   { immediate: true },
 )
@@ -285,7 +283,6 @@ async function saveCellEdit() {
         })
         paidLeaveList.value.push(created)
       }
-      dirty.value = true
     } else {
       // 有給以外: 既存の有給があれば解除（即時保存）
       if (existingLeave) {
@@ -312,9 +309,10 @@ async function saveCellEdit() {
           })
         }
       }
-      dirty.value = true
     }
     editCell.value = null
+    // 「反映」でそのまま保存まで行う（別途「更新」を押す二度手間をなくす）
+    await saveShift()
   } catch (e) {
     message.error(`更新失敗: ${(e as Error).message}`)
   }
@@ -334,7 +332,6 @@ async function saveShift() {
       rest_minutes: a.rest_minutes,
     }))
     await shiftStore.saveAssignments(shift.value.id, payload)
-    dirty.value = false
     if (shortfalls.value.length) {
       message.warning(`更新しました（人数不足が ${shortfalls.value.length} 件あります）`)
     } else {
@@ -460,10 +457,6 @@ function goPrint() {
                   : 'ドラフト'
             }}
           </NTag>
-          <NTag v-if="dirty" type="warning" size="small">未保存の変更あり</NTag>
-          <NButton v-if="shift" type="primary" size="small" :disabled="!dirty" @click="saveShift">
-            更新
-          </NButton>
         </NSpace>
       </template>
       <NSpin :show="loading || shiftStore.generating">
@@ -495,7 +488,7 @@ function goPrint() {
               </span>
             </div>
             <p class="shortfall-note">
-              ※土日は休日扱いで判定しています（祝日は未考慮）。編集後は「更新」で保存してください。
+              ※土日は休日扱いで判定しています（祝日は未考慮）。セルを編集して「反映」すると自動保存されます。
             </p>
           </NAlert>
           <div class="table-scroll">
