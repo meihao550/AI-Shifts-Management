@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { NAvatar, NButton, NDropdown } from 'naive-ui'
+import { NAvatar, NButton, NDropdown, NModal, NSpace } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
+import { ref } from 'vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,13 +24,12 @@ const nav = computed(() => {
   return items
 })
 
-const menuOptions = [{ label: 'ログアウト', key: 'logout' }]
+const showLogoutConfirm = ref(false)
 
-function onMenu(key: string) {
-  if (key === 'logout') {
-    auth.logout()
-    router.push('/login')
-  }
+function doLogout() {
+  showLogoutConfirm.value = false
+  auth.logout()
+  router.push('/login')
 }
 </script>
 
@@ -42,35 +42,30 @@ function onMenu(key: string) {
         <span v-if="currentTitle" class="pill">{{ currentTitle }}</span>
       </RouterLink>
       <nav class="nav">
-        <RouterLink
-          v-for="item in nav"
-          :key="item.key"
-          :to="item.to"
-          class="nav-item"
-          active-class="active"
-        >
+        <RouterLink v-for="item in nav" :key="item.key" :to="item.to" class="nav-item" active-class="active">
           {{ item.label }}
         </RouterLink>
       </nav>
       <div class="user">
-        <NDropdown :options="menuOptions" @select="onMenu">
-          <NButton text>
-            <template v-if="auth.user">
-              <NAvatar
-                v-if="auth.user.picture_url"
-                round
-                size="small"
-                :src="auth.user.picture_url"
-                style="margin-right: 8px"
-              />
-              <span>{{ auth.user.name }}</span>
-              <span class="role">{{ auth.user.role === 'admin' ? '管理者' : '社員' }}</span>
-            </template>
-          </NButton>
-        </NDropdown>
+        <NButton size="small" quaternary class="logout-btn" @click="showLogoutConfirm = true">
+          ログアウト
+        </NButton>
+        <template v-if="auth.user">
+          <NAvatar v-if="auth.user.picture_url" round size="small" :src="auth.user.picture_url"
+            style="margin-right: 8px" />
+          <span>{{ auth.user.name }}</span>
+          <span class="role">{{ auth.user.role === 'admin' ? '管理者' : '社員' }}</span>
+        </template>
       </div>
     </div>
   </header>
+  <NModal v-model:show="showLogoutConfirm" preset="card" title="確認" style="width: 360px">
+    <p style="margin: 0 0 16px">ログアウトしますか？</p>
+    <NSpace justify="end">
+      <NButton @click="showLogoutConfirm = false">いいえ</NButton>
+      <NButton type="primary" @click="doLogout">はい</NButton>
+    </NSpace>
+  </NModal>
 </template>
 
 <style scoped>
@@ -79,15 +74,13 @@ function onMenu(key: string) {
   color: var(--ink);
   /* 時間帯(朝→夕→深夜)の細い帯を1本だけ下端に。この題材の署名的ディテール。 */
   border-bottom: 2px solid transparent;
-  border-image: linear-gradient(
-      90deg,
+  border-image: linear-gradient(90deg,
       var(--morning) 0%,
       var(--evening) 50%,
-      var(--night) 100%
-    )
-    1;
+      var(--night) 100%) 1;
   box-shadow: 0 1px 3px rgba(25, 28, 24, 0.06);
 }
+
 .header-inner {
   max-width: var(--page-max-width);
   margin: 0 auto;
@@ -97,6 +90,7 @@ function onMenu(key: string) {
   align-items: center;
   height: 60px;
 }
+
 .brand {
   display: flex;
   align-items: center;
@@ -105,6 +99,7 @@ function onMenu(key: string) {
   text-decoration: none;
   color: var(--ink);
 }
+
 .mark {
   display: grid;
   place-items: center;
@@ -116,11 +111,13 @@ function onMenu(key: string) {
   font-weight: 700;
   font-size: 16px;
 }
+
 .logo {
   font-weight: 700;
   font-size: 18px;
   letter-spacing: 0.02em;
 }
+
 .pill {
   padding: 2px 9px;
   border-radius: var(--r-chip);
@@ -129,11 +126,13 @@ function onMenu(key: string) {
   font-size: 12px;
   font-weight: 600;
 }
+
 .nav {
   display: flex;
   gap: 6px;
   flex: 1;
 }
+
 .nav-item {
   position: relative;
   color: var(--ink-2);
@@ -144,17 +143,27 @@ function onMenu(key: string) {
   font-weight: 500;
   transition: color 0.12s, background 0.12s;
 }
+
 .nav-item:hover {
   color: var(--ink);
   background: var(--panel-strip);
 }
+
 .nav-item.active {
   color: var(--indigo-700);
   background: var(--indigo-050);
 }
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .user :deep(.n-button) {
   color: var(--ink);
 }
+
 .role {
   margin-left: 8px;
   font-size: 11px;
