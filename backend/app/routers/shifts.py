@@ -1,7 +1,5 @@
 """Shift generation + management routes."""
 
-import calendar
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,11 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
-from app.models.employee import (
-    Employee,
-    EmployeeAvailability,
-    EmployeeFixedSchedule,
-)
+from app.models.employee import Employee, EmployeeAvailability
 from app.models.pair import EmployeePairConstraint
 from app.models.rule import HourlyStaffingRule, ShiftPattern
 from app.models.shift import Shift, ShiftAssignment, ShiftStatus
@@ -103,7 +97,9 @@ async def generate_shift(
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
 
-    # 具体的な希望・不可・有給を AvailabilitySpec 化。
+    # 休日/希望日(出勤ソフト)/確定出勤/有給 を AvailabilitySpec 化。
+    # 固定カレンダーは「曜日で一括登録」により具体日付の availability として保存されるため、
+    # ここでの特別扱いは不要（同じデータをシフト表カレンダーと共有＝同期。ADR-0007/0009）。
     availability_specs = [
         AvailabilitySpec(
             employee_id=a.employee_id,
@@ -114,30 +110,6 @@ async def generate_shift(
         )
         for a in availability_rows
     ]
-    # 固定カレンダー(曜日パターン)を対象月へ展開して追加する(ADR-0007, ADR-0009)。
-    # off→unavailable(ハード休み) / work→preferred(弱いnudge) / work_hard→mandatory(確定出勤)。
-    # 同じ(従業員,日付)に具体的な指定がある場合はそちらを優先し、固定由来はスキップ。
-    fixed_kind = {"off": "unavailable", "work": "preferred", "work_hard": "mandatory"}
-    concrete_keys = {(a.employee_id, a.target_date) for a in availability_rows}
-    fixed_rows = list(db.execute(select(EmployeeFixedSchedule)).scalars())
-    fixed_by_emp: dict[int, dict[int, str]] = {}
-    for fr in fixed_rows:
-        fixed_by_emp.setdefault(fr.employee_id, {})[fr.day_of_week] = fr.status.value
-    if fixed_by_emp:
-        _, num_days = calendar.monthrange(payload.year, payload.month)
-        for emp_id, by_dow in fixed_by_emp.items():
-            for day_num in range(1, num_days + 1):
-                d = date(payload.year, payload.month, day_num)
-                st = by_dow.get(d.weekday())  # date.weekday(): 月=0..日=6
-                if st is None or (emp_id, d) in concrete_keys:
-                    continue
-                availability_specs.append(
-                    AvailabilitySpec(
-                        employee_id=emp_id,
-                        target_date=d,
-                        kind=fixed_kind[st],
-                    )
-                )
 
     # 禁止ペア（ハード制約 H-6）を読み込み、(a_id, b_id) のタプル列にする
     pair_rows = list(db.execute(select(EmployeePairConstraint)).scalars())

@@ -37,10 +37,10 @@ _Avoid_: メインシフト（廃止語）
 掛け持ち（複数の職を持つ）従業員の目印（`is_dual_worker`）。現在はシフト生成の配置には影響しない属性ラベル。
 
 **固定カレンダー (Fixed Calendar)**:
-従業員ごとの曜日単位の勤務パターン（`確定出勤`/`出勤ソフト`/`休み`/`指定なし`）。毎月流用し、生成時に対象月の日付へ展開する。`休み`→勤務不可(unavailable)、`出勤ソフト`→希望(preferred)、`確定出勤`→必ず1シフト(mandatory)に展開する。個別日の指定があればそちらが優先（[ADR-0007](docs/adr/0007-fixed-weekly-calendar.md), [ADR-0009](docs/adr/0009-mandatory-fixed-work.md)）。
+従業員管理の「カレンダー」は、シフト表の「休日・希望日」カレンダーと**同一コンポーネント・同一データ**（`EmployeeAvailability`）を従業員固定で表示したもの。編集は即同期する。毎月同じ曜日パターン（例: 木曜だけ確定出勤・他は休日）は「**曜日で一括登録**」で当月へ適用して流用する（[ADR-0007](docs/adr/0007-fixed-weekly-calendar.md)）。
 
 **確定出勤 (Mandatory Work)**:
-固定カレンダーの `work_hard`。その日は必ず1シフト入れる（通常段はハード、診断段は強いソフト＋警告）。`mandatory` として展開される（[ADR-0009](docs/adr/0009-mandatory-fixed-work.md)）。
+availability 種別 `mandatory`。その日は必ず1シフト入れる（通常段はハード、診断段は強いソフト＋警告）。希望日(`preferred`)＝出勤ソフト（弱い希望）と区別する（[ADR-0009](docs/adr/0009-mandatory-fixed-work.md)）。
 
 ### 勤務時間 (Working Time)
 

@@ -83,11 +83,6 @@ class Employee(Base):
         back_populates="employee",
         cascade="all, delete-orphan",
     )
-    fixed_schedules: Mapped[list[EmployeeFixedSchedule]] = relationship(
-        "EmployeeFixedSchedule",
-        back_populates="employee",
-        cascade="all, delete-orphan",
-    )
     assignments: Mapped[list[ShiftAssignment]] = relationship(  # noqa: F821
         "ShiftAssignment",
         back_populates="employee",
@@ -95,8 +90,9 @@ class Employee(Base):
 
 
 class AvailabilityKind(StrEnum):
-    unavailable = "unavailable"  # 絶対勤務不可
-    preferred = "preferred"  # 入りたい
+    unavailable = "unavailable"  # 絶対勤務不可（休日）
+    preferred = "preferred"  # 入りたい（希望日＝出勤ソフト）
+    mandatory = "mandatory"  # 確定出勤：その日は必ず1シフト入れる(ADR-0009)
     paid_leave = "paid_leave"  # 有給休暇（勤務不可扱い＋人件費に日額を加算）
 
 
@@ -120,35 +116,3 @@ class EmployeeAvailability(Base):
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     employee: Mapped[Employee] = relationship("Employee", back_populates="availabilities")
-
-
-class FixedScheduleStatus(StrEnum):
-    work = "work"  # 出勤ソフト（毎月、生成時に preferred=弱い希望として展開）
-    work_hard = "work_hard"  # 確定出勤（毎月、生成時に mandatory=必ず1シフトとして展開。ADR-0009）
-    off = "off"  # その曜日は休み（毎月、生成時に unavailable として展開）
-
-
-class EmployeeFixedSchedule(Base):
-    """従業員ごとの固定カレンダー（曜日パターン）。毎月流用する(ADR-0007)。
-
-    day_of_week は Python の date.weekday() 準拠（月=0 .. 日=6）。
-    行が無い曜日は「指定なし」＝制約なし。
-    """
-
-    __tablename__ = "employee_fixed_schedules"
-    __table_args__ = (
-        UniqueConstraint("employee_id", "day_of_week", name="uq_fixed_schedule"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    employee_id: Mapped[int] = mapped_column(
-        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
-    )
-    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=月 .. 6=日
-    status: Mapped[FixedScheduleStatus] = mapped_column(
-        SAEnum(FixedScheduleStatus, name="fixed_schedule_status"), nullable=False
-    )
-
-    employee: Mapped[Employee] = relationship(
-        "Employee", back_populates="fixed_schedules"
-    )

@@ -66,10 +66,3 @@ class AvailabilityCreate(BaseModel):
 class AvailabilityRead(AvailabilityCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
-
-
-# 固定カレンダー（曜日パターン）。day_of_week は date.weekday() 準拠(月=0..日=6)。
-class FixedScheduleItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    day_of_week: int = Field(ge=0, le=6)
-    status: Literal["work", "work_hard", "off"]

@@ -9,20 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
-from app.models.employee import (
-    AvailabilityKind,
-    Employee,
-    EmployeeAvailability,
-    EmployeeFixedSchedule,
-    FixedScheduleStatus,
-)
+from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
 from app.schemas.employee import (
     AvailabilityCreate,
     AvailabilityRead,
     EmployeeCreate,
     EmployeeRead,
     EmployeeUpdate,
-    FixedScheduleItem,
 )
 
 router = APIRouter(prefix="/employees", tags=["employees"])
@@ -151,51 +144,3 @@ def delete_availability(
     db.delete(row)
     db.commit()
     return None
-
-
-@router.get("/{employee_id}/fixed-schedule", response_model=list[FixedScheduleItem])
-def get_fixed_schedule(
-    employee_id: int,
-    _user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)],
-):
-    """固定カレンダー（曜日パターン）を取得。行が無い曜日は「指定なし」として省略。"""
-    stmt = (
-        select(EmployeeFixedSchedule)
-        .where(EmployeeFixedSchedule.employee_id == employee_id)
-        .order_by(EmployeeFixedSchedule.day_of_week)
-    )
-    return list(db.execute(stmt).scalars())
-
-
-@router.put("/{employee_id}/fixed-schedule", response_model=list[FixedScheduleItem])
-def put_fixed_schedule(
-    employee_id: int,
-    items: list[FixedScheduleItem],
-    _admin: AdminUser,
-    db: Annotated[Session, Depends(get_db)],
-):
-    """固定カレンダーを一括置き換え（送られた曜日だけ残し、他は削除＝指定なし）。"""
-    employee = db.get(Employee, employee_id)
-    if not employee:
-        raise HTTPException(status_code=404, detail="employee not found")
-    # 既存を全削除してから作り直す（差し替え）。重複曜日は後勝ちで畳む。
-    db.query(EmployeeFixedSchedule).filter(
-        EmployeeFixedSchedule.employee_id == employee_id
-    ).delete()
-    by_dow: dict[int, str] = {it.day_of_week: it.status for it in items}
-    for dow, st in sorted(by_dow.items()):
-        db.add(
-            EmployeeFixedSchedule(
-                employee_id=employee_id,
-                day_of_week=dow,
-                status=FixedScheduleStatus(st),
-            )
-        )
-    db.commit()
-    stmt = (
-        select(EmployeeFixedSchedule)
-        .where(EmployeeFixedSchedule.employee_id == employee_id)
-        .order_by(EmployeeFixedSchedule.day_of_week)
-    )
-    return list(db.execute(stmt).scalars())

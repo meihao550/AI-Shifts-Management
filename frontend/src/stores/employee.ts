@@ -1,12 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
-import type {
-  Availability,
-  AvailabilityKind,
-  Employee,
-  FixedScheduleItem,
-  PairConstraint,
-} from '@/types'
+import type { Availability, AvailabilityKind, Employee, PairConstraint } from '@/types'
 
 interface State {
   employees: Employee[]
@@ -73,21 +67,6 @@ export const useEmployeeStore = defineStore('employee', {
     },
     async deletePair(id: number) {
       await api.delete(`/pair-constraints/${id}`)
-    },
-    // 固定カレンダー(曜日パターン)。
-    async getFixedSchedule(id: number): Promise<FixedScheduleItem[]> {
-      const { data } = await api.get<FixedScheduleItem[]>(`/employees/${id}/fixed-schedule`)
-      return data
-    },
-    async saveFixedSchedule(
-      id: number,
-      items: FixedScheduleItem[],
-    ): Promise<FixedScheduleItem[]> {
-      const { data } = await api.put<FixedScheduleItem[]>(
-        `/employees/${id}/fixed-schedule`,
-        items,
-      )
-      return data
     },
   },
 })

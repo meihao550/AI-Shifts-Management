@@ -42,15 +42,8 @@ export interface PairConstraint {
   employee_b_id: number
 }
 
-// 固定カレンダー(曜日パターン)。day_of_week は 月=0..日=6。行が無い曜日=指定なし。
-// work=出勤ソフト(希望) / work_hard=確定出勤(必ず入れる) / off=休み。
-export type FixedScheduleStatus = 'work' | 'work_hard' | 'off'
-export interface FixedScheduleItem {
-  day_of_week: number
-  status: FixedScheduleStatus
-}
-
-export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
+// 休日(unavailable) / 希望日=出勤ソフト(preferred) / 確定出勤(mandatory) / 有給(paid_leave)。
+export type AvailabilityKind = 'unavailable' | 'preferred' | 'mandatory' | 'paid_leave'
 
 export interface Availability {
   id: number
