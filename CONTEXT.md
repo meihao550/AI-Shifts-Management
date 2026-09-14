@@ -27,6 +27,9 @@ _Avoid_: メインシフト（廃止語）
 **許容過剰 (Surplus Tolerance, α)**:
 各時間に必要人数を超えて配置してよい上限（α）。`必要人数 ≤ 配置 ≤ 必要人数 + α`。短い勤務可能時間帯の従業員なども +α の枠で配置できる。既定 α=1（[ADR-0005](docs/adr/0005-coverage-surplus-tolerance.md)）。
 
+**連勤制限 (Consecutive Work-day Limit)**:
+全従業員一律で連続勤務は最大4日（5連勤以上を禁止）。生成月内の連続日でカウントし、月をまたぐ連続は数えない（[ADR-0008](docs/adr/0008-consecutive-work-day-limit.md)）。
+
 **Wワークパターン (Dual-work Pattern)** — _廃止 (deprecated)_:
 かつては `is_basic=false` の掛け持ち専用パターンを指した。基本/Wワークのパターン区別は撤廃され、全パターンは1つのプールに統合された。配置制限は **勤務可能時間帯** のみ（[ADR-0004](docs/adr/0004-unify-shift-patterns.md)）。
 

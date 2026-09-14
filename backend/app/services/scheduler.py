@@ -60,6 +60,8 @@ INSURANCE_HOURS_BOUNDS: dict[str, tuple[int, int | None]] = {
 # 保険区分の月間時間の下限違反(不足分1時間あたり)のソフトペナルティ。
 # 週回数と同格の弱い寄せにし、フォールバックで下限を緩めたときの誘導に使う。
 INSURANCE_UNDER_WEIGHT = 1
+# 連勤の上限（ADR-0008）。全従業員一律。生成月内の連続 MAX_CONSECUTIVE_DAYS+1 日を禁止。
+MAX_CONSECUTIVE_DAYS = 4
 
 
 @dataclass(frozen=True)
@@ -374,6 +376,20 @@ class ShiftScheduler:
                     over_min = model.NewIntVar(0, total_month_minutes, f"ins_over_e{e.id}")
                     model.Add(worked - lo_h * 60 == over_min - under_min)
                     insurance_under_terms.append(under_min)
+
+        # Hard: 連勤制限（ADR-0008）。生成月内で連続 MAX_CONSECUTIVE_DAYS+1 日すべて勤務を禁止。
+        # 各従業員・各スライディング窓で「窓内の勤務日数 ≤ MAX_CONSECUTIVE_DAYS」。
+        # x は「1日1パターン以下」制約済みなので works(e,d)=Σ_p x[e,d,p] は 0/1。
+        # 月をまたぐ連続は対象外（前月シフトは参照しない）。
+        win = MAX_CONSECUTIVE_DAYS + 1
+        if len(days) >= win:
+            for e in emps:
+                for i in range(len(days) - win + 1):
+                    window_days = days[i : i + win]
+                    model.Add(
+                        sum(x[(e.id, d, p.id)] for d in window_days for p in pats)
+                        <= MAX_CONSECUTIVE_DAYS
+                    )
 
         # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
         # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、

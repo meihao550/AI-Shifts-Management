@@ -125,10 +125,16 @@ def test_infeasible_reports_shortage_via_slack():
 
 
 def test_forbidden_pair_separated_into_non_overlapping_shifts():
-    """朝1・夜1なら、禁止ペアでも重ならない別シフトに分けて解ける。"""
+    """朝1・夜1なら、禁止ペアでも重ならない別シフトに分けて解ける。
+
+    連勤制限(最大4連勤, ADR-0008)があるため、毎日 朝1+夜1 を満たすには2人では足りない
+    （各人が週1日は休む）。十分な人数を与えたうえで、禁止ペア(1,2)が同時間帯に同居しない
+    ことを検証する。
+    """
     result = _make_scheduler(
         patterns=[MORNING, EVENING],
         staffing_rules=_hourly((MORNING_HOURS, 1), (EVENING_HOURS, 1)),
+        employees=[_employee(i, f"E{i}") for i in range(1, 5)],
         forbidden_pairs=[(1, 2)],
     ).solve()
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
@@ -370,6 +376,31 @@ def test_available_window_blocks_out_of_window_pattern():
     # 夜勤(窓外)は一切割り当てられない。朝(窓内)には入る。
     assert all(a["shift_type"] != "evening" for a in result.assignments)
     assert any(a["shift_type"] == "morning" for a in result.assignments)
+
+
+# ---- 連勤制限(ADR-0008) ---------------------------------------------------------
+
+
+def test_no_five_consecutive_work_days():
+    """どの従業員も5連勤しない（最大4連勤。生成月内でカウント）。"""
+    # 1人だけで朝に毎日1人必要 → 放っておくと毎日勤務(28連勤)になるが、連勤制限で崩れる。
+    emp = _employee(1, "A")
+    result = _make_scheduler(
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    worked_days = sorted(a["target_date"] for a in result.assignments if a["employee_id"] == 1)
+    # 連続日数の最大が4以下であること
+    max_run = run = 0
+    prev = None
+    for d in worked_days:
+        run = run + 1 if prev is not None and (d - prev).days == 1 else 1
+        max_run = max(max_run, run)
+        prev = d
+    assert max_run <= 4
 
 
 # ---- 保険区分ごとの月間実働時間(ADR-0006) ---------------------------------------
