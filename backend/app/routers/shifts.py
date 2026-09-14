@@ -114,9 +114,10 @@ async def generate_shift(
         )
         for a in availability_rows
     ]
-    # 固定カレンダー(曜日パターン)を対象月へ展開して追加する(ADR-0007)。
-    # off→unavailable(ハード休み) / work→preferred(弱いnudge)。
+    # 固定カレンダー(曜日パターン)を対象月へ展開して追加する(ADR-0007, ADR-0009)。
+    # off→unavailable(ハード休み) / work→preferred(弱いnudge) / work_hard→mandatory(確定出勤)。
     # 同じ(従業員,日付)に具体的な指定がある場合はそちらを優先し、固定由来はスキップ。
+    fixed_kind = {"off": "unavailable", "work": "preferred", "work_hard": "mandatory"}
     concrete_keys = {(a.employee_id, a.target_date) for a in availability_rows}
     fixed_rows = list(db.execute(select(EmployeeFixedSchedule)).scalars())
     fixed_by_emp: dict[int, dict[int, str]] = {}
@@ -134,7 +135,7 @@ async def generate_shift(
                     AvailabilitySpec(
                         employee_id=emp_id,
                         target_date=d,
-                        kind="unavailable" if st == "off" else "preferred",
+                        kind=fixed_kind[st],
                     )
                 )
 

@@ -62,6 +62,9 @@ INSURANCE_HOURS_BOUNDS: dict[str, tuple[int, int | None]] = {
 INSURANCE_UNDER_WEIGHT = 1
 # 連勤の上限（ADR-0008）。全従業員一律。生成月内の連続 MAX_CONSECUTIVE_DAYS+1 日を禁止。
 MAX_CONSECUTIVE_DAYS = 4
+# 確定出勤(固定カレンダーの work_hard, ADR-0009)を満たせないときのソフトペナルティ。
+# 不足(=最優先)より小さく、平準化より大きくして「できる限り確定出勤を守る」寄せにする。
+MANDATORY_WEIGHT = 100
 
 
 @dataclass(frozen=True)
@@ -97,7 +100,7 @@ class EmployeeSpec:
 class AvailabilitySpec:
     employee_id: int
     target_date: date
-    kind: str  # unavailable | preferred
+    kind: str  # unavailable | preferred | paid_leave | mandatory(確定出勤)
     shift_type: str | None = None
     note: str | None = None  # 希望日の時間帯 "HH:MM-HH:MM"（任意）
 
@@ -162,6 +165,14 @@ class ShiftScheduler:
                 continue
         return s
 
+    def _mandatory_lookup(self) -> set[tuple[int, date]]:
+        # 確定出勤（固定カレンダーの work_hard）。その日は必ず1シフト入れる(ADR-0009)。
+        s: set[tuple[int, date]] = set()
+        for a in self.availabilities:
+            if a.kind == "mandatory":
+                s.add((a.employee_id, a.target_date))
+        return s
+
     def _preferred_lookup(
         self,
     ) -> list[tuple[int, date, str | None, frozenset[int]]]:
@@ -224,6 +235,8 @@ class ShiftScheduler:
 
         unavailable = self._unavailable_lookup()
         preferred = self._preferred_lookup()
+        # 確定出勤(work_hard)。勤務不可と衝突する組は勤務不可を優先して除く。
+        mandatory = self._mandatory_lookup() - unavailable
 
         # 各パターンがカバーする「拡張時」の集合を先に計算しておく（深夜跨ぎ対応）。
         pat_hours: dict[int, set[int]] = {p.id: _pattern_hours(p.start, p.end) for p in pats}
@@ -252,6 +265,22 @@ class ShiftScheduler:
                 if (e.id, d) in unavailable:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
+
+        # Constraint: 確定出勤(work_hard, ADR-0009)。その日は必ず1シフト入れる。
+        # ハード段(use_slack=False)では厳守。診断段(use_slack=True)では、物理的に不可能な
+        # ときのため強いペナルティのソフトに緩め、満たせなかった分は後で警告する。
+        mandatory_unmet_terms: list[cp_model.IntVar] = []
+        for e in emps:
+            for d in days:
+                if (e.id, d) not in mandatory:
+                    continue
+                works = sum(x[(e.id, d, p.id)] for p in pats)
+                if use_slack:
+                    unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
+                    model.Add(works + unmet >= 1)
+                    mandatory_unmet_terms.append(unmet)
+                else:
+                    model.Add(works == 1)
 
         # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
         # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
@@ -511,6 +540,9 @@ class ShiftScheduler:
         if insurance_under_terms:
             # 保険区分の下限に対する不足(分)を弱く嫌う（下限がソフトの段のみ）。
             obj += INSURANCE_UNDER_WEIGHT * sum(insurance_under_terms)
+        if mandatory_unmet_terms:
+            # 確定出勤の未達は強く嫌う（不足の次に優先。診断段のみ）。
+            obj += MANDATORY_WEIGHT * sum(mandatory_unmet_terms)
         model.Minimize(obj)
 
         solver = cp_model.CpSolver()
@@ -545,6 +577,20 @@ class ShiftScheduler:
                             )
             if use_slack:
                 warnings.extend(self._slack_warnings(solver, slack_vars))
+            # 確定出勤(work_hard)を満たせなかった (従業員, 日) を警告(診断段でのみ起こる)。
+            if mandatory:
+                worked_keys = {(a["employee_id"], a["target_date"]) for a in assignments}
+                unmet = sorted(k for k in mandatory if k not in worked_keys)
+                if unmet:
+                    names = {e.id: e.name for e in emps}
+                    examples = "、".join(
+                        f"{names.get(eid, eid)} {d.isoformat()}" for eid, d in unmet[:3]
+                    )
+                    more = f" ほか{len(unmet) - 3}件" if len(unmet) > 3 else ""
+                    warnings.append(
+                        f"確定出勤を満たせませんでした: {len(unmet)}件（例: {examples}{more}）。"
+                        f"勤務可能時間帯・必要人数・連勤/保険の制約を見直してください。"
+                    )
             # 保険区分の下限を満たせなかった従業員を警告(下限をソフトに緩めた段でのみ起こる)。
             for e in emps:
                 lo_h, _ = INSURANCE_HOURS_BOUNDS.get(

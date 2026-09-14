@@ -123,7 +123,8 @@ class EmployeeAvailability(Base):
 
 
 class FixedScheduleStatus(StrEnum):
-    work = "work"  # その曜日は出勤（毎月、生成時に preferred として展開）
+    work = "work"  # 出勤ソフト（毎月、生成時に preferred=弱い希望として展開）
+    work_hard = "work_hard"  # 確定出勤（毎月、生成時に mandatory=必ず1シフトとして展開。ADR-0009）
     off = "off"  # その曜日は休み（毎月、生成時に unavailable として展開）
 
 

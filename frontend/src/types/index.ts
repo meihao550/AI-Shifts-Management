@@ -43,7 +43,8 @@ export interface PairConstraint {
 }
 
 // 固定カレンダー(曜日パターン)。day_of_week は 月=0..日=6。行が無い曜日=指定なし。
-export type FixedScheduleStatus = 'work' | 'off'
+// work=出勤ソフト(希望) / work_hard=確定出勤(必ず入れる) / off=休み。
+export type FixedScheduleStatus = 'work' | 'work_hard' | 'off'
 export interface FixedScheduleItem {
   day_of_week: number
   status: FixedScheduleStatus

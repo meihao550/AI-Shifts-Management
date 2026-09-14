@@ -407,6 +407,28 @@ def test_fixed_off_day_as_unavailable_blocks_assignment():
     assert all(a["target_date"] != _date(2026, 2, 5) for a in result.assignments)
 
 
+def test_mandatory_work_forces_assignment():
+    """確定出勤(mandatory)は、その日に需要が無くても必ず1シフト配置される(ADR-0009)。"""
+    from app.services.scheduler import AvailabilitySpec
+
+    emp = _employee(1, "A")
+    sched = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[emp],
+        patterns=[MORNING],
+        staffing_rules={},  # 需要なし。それでも確定出勤の日は入る。
+        availabilities=[
+            AvailabilitySpec(employee_id=1, target_date=_date(2026, 2, 5), kind="mandatory")
+        ],
+        max_solve_seconds=10.0,
+    )
+    result = sched.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    worked = {a["target_date"] for a in result.assignments if a["employee_id"] == 1}
+    assert _date(2026, 2, 5) in worked
+
+
 # ---- 連勤制限(ADR-0008) ---------------------------------------------------------
 
 

@@ -72,4 +72,4 @@ class AvailabilityRead(AvailabilityCreate):
 class FixedScheduleItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     day_of_week: int = Field(ge=0, le=6)
-    status: Literal["work", "off"]
+    status: Literal["work", "work_hard", "off"]
