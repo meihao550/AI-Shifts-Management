@@ -55,8 +55,8 @@ _Avoid_: 休息
 **人件費 (Labor Cost)**:
 従業員1人・1か月あたりの 基本給 + 深夜割増 + 交通費 + 有給 の合計。
 
-**保険区分 (Insurance Status)**:
-`social` / `employment` / `none`。月間の実働時間で判定（≥120h / ≥80h / それ未満）。
+**保険区分 (Insurance Type)**:
+`social` / `employment` / `none`。従業員ごとに管理者が設定する**マスタ属性**（`insurance_type`）。シフト生成で月間実働時間をハードに制約する: 社保 ≥120h / 雇用 80〜119h / なし ≤79h（[ADR-0006](docs/adr/0006-insurance-monthly-hours.md)）。人件費表示もこのマスタ属性を用いる（未設定時のみ実働時間から推定）。
 
 **有給 (Paid Leave)**:
 勤務しない日だが人件費に日額を加算する。実働時間・保険判定には算入しない。

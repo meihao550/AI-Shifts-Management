@@ -50,6 +50,9 @@ class Employee(Base):
     weekly_shifts_pinned: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # 有給
     paid_leave_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 保険区分(マスタ属性)。social(社会保険)/employment(雇用保険)/none(なし)。
+    # 月間実働時間のハード制約に使う(ADR-0006): social≥120h / employment 80-119h / none≤79h。
+    insurance_type: Mapped[str] = mapped_column(String(16), default="none", nullable=False)
     # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。
     # 終了 <= 開始 は翌日跨ぎ扱い（例 18-2 = 18:00〜翌2:00）。この窓に完全に収まる
     # パターンのみ生成時に配置する（ハード制約）。

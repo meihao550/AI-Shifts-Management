@@ -1,8 +1,12 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.employee import AvailabilityKind, EmployeeRole
+
+# 保険区分(マスタ属性)。payroll の InsuranceStatus と同じ語彙。
+InsuranceType = Literal["social", "employment", "none"]
 
 
 class EmployeeBase(BaseModel):
@@ -18,6 +22,8 @@ class EmployeeBase(BaseModel):
     role: EmployeeRole = EmployeeRole.employee
     active: bool = True
     paid_leave_amount: int = Field(default=0, ge=0)
+    # 保険区分(マスタ属性)。月間実働時間のハード制約に使う(ADR-0006)。
+    insurance_type: InsuranceType = "none"
     # 普段入れる時間帯（1時間単位, 0〜24）。両方 None なら制限なし。
     available_start_hour: int | None = Field(default=None, ge=0, le=24)
     available_end_hour: int | None = Field(default=None, ge=0, le=24)
@@ -37,6 +43,7 @@ class EmployeeUpdate(BaseModel):
     is_dual_worker: bool | None = None
     weekly_shifts: int | None = Field(default=None, ge=0, le=7)
     weekly_shifts_pinned: bool | None = None
+    insurance_type: InsuranceType | None = None
     role: EmployeeRole | None = None
     active: bool | None = None
     available_start_hour: int | None = Field(default=None, ge=0, le=24)

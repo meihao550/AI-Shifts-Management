@@ -370,3 +370,53 @@ def test_available_window_blocks_out_of_window_pattern():
     # 夜勤(窓外)は一切割り当てられない。朝(窓内)には入る。
     assert all(a["shift_type"] != "evening" for a in result.assignments)
     assert any(a["shift_type"] == "morning" for a in result.assignments)
+
+
+# ---- 保険区分ごとの月間実働時間(ADR-0006) ---------------------------------------
+
+# 朝 9:00-17:00 = 実働8h(480分)。保険区分テスト用に worked_minutes を明示する。
+MORNING_8H = PatternSpec(
+    id=1, code="morning", label="morning",
+    start=time(9, 0), end=time(17, 0), category="morning", worked_minutes=480,
+)
+
+
+def _worked_hours(result, emp_id: int) -> float:
+    """割当の実働時間(h)を従業員ごとに集計する。全パターンが8h(=480分)前提。"""
+    return sum(8 for a in result.assignments if a["employee_id"] == emp_id)
+
+
+def test_insurance_none_caps_monthly_hours():
+    """保険なし(none)の従業員は月79h以下に抑えられる（上限は常にハード）。"""
+    emp = EmployeeSpec(
+        id=1, name="A", weekly_target=7, hourly_wage=1000,
+        weekly_shifts_pinned=False, insurance_type="none",
+    )
+    # 朝に毎日1人必要（28日）だが、none上限79h=最大9シフトまでしか入れない。
+    result = _make_scheduler(
+        patterns=[MORNING_8H],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=[emp],
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert _worked_hours(result, 1) <= 79
+
+
+def test_insurance_social_enforces_lower_bound():
+    """社会保険(social)の従業員は月120h以上働く（下限が需要より優先してハード）。"""
+    emps = [
+        EmployeeSpec(
+            id=i, name=f"E{i}", weekly_target=7, hourly_wage=1000,
+            weekly_shifts_pinned=False, insurance_type="social",
+        )
+        for i in (1, 2)
+    ]
+    # 朝に毎日1人必要（1人で足りる）でも、2人とも社保下限120h(=15シフト)を満たす。
+    result = _make_scheduler(
+        patterns=[MORNING_8H],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        employees=emps,
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert _worked_hours(result, 1) >= 120
+    assert _worked_hours(result, 2) >= 120

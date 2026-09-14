@@ -50,6 +50,16 @@ SURPLUS_TOLERANCE = 1
 # 過剰1人・1時間あたりの弱ペナルティ。平準化(BALANCE_WEIGHT)より十分小さくし、
 # 「誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない」挙動にする。
 SURPLUS_WEIGHT = 2
+# 保険区分ごとの月間実働時間(時間)の下限・上限(ADR-0006)。上限 None は無制限。
+# social(社会保険): 120h以上 / employment(雇用保険): 80-119h / none(なし): 79h以下。
+INSURANCE_HOURS_BOUNDS: dict[str, tuple[int, int | None]] = {
+    "social": (120, None),
+    "employment": (80, 119),
+    "none": (0, 79),
+}
+# 保険区分の月間時間の下限違反(不足分1時間あたり)のソフトペナルティ。
+# 週回数と同格の弱い寄せにし、フォールバックで下限を緩めたときの誘導に使う。
+INSURANCE_UNDER_WEIGHT = 1
 
 
 @dataclass(frozen=True)
@@ -61,6 +71,7 @@ class PatternSpec:
     end: time  # 終了時刻
     category: str  # morning|evening|night（開始時刻から自動判定）
     rest_minutes: int = 0  # 休憩(分)。割当へスナップショットする
+    worked_minutes: int = 0  # 実働(分) = スパン − 休憩。保険区分の月間時間制約に使う
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,8 @@ class EmployeeSpec:
     # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト、False は常にソフト。
     weekly_shifts_pinned: bool = True
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
+    # 保険区分(social/employment/none)。月間実働時間の上下限に使う(ADR-0006)。
+    insurance_type: str = "none"
     # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
     available_start: int | None = None
     available_end: int | None = None
@@ -336,6 +349,32 @@ class ShiftScheduler:
                 penalties.append(over)
                 penalties.append(under)
 
+        # Constraint: 保険区分ごとの月間実働時間(分)の上下限(ADR-0006)。
+        # 上限(過労側・法令準拠)は常にハード。下限(不足側)は weekly_hard の時ハード、
+        # 他はソフト(不足分にペナルティ＋警告)にして週回数と同じくフォールバックで緩める。
+        insurance_under_terms: list[cp_model.IntVar] = []
+        total_month_minutes = sum(p.worked_minutes for p in pats) * len(days)
+        for e in emps:
+            lo_h, hi_h = INSURANCE_HOURS_BOUNDS.get(
+                e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
+            )
+            worked = sum(
+                x[(e.id, d, p.id)] * p.worked_minutes for d in days for p in pats
+            )
+            # 上限: 常にハード（雇用≤119h / なし≤79h。social は上限なし）
+            if hi_h is not None:
+                model.Add(worked <= hi_h * 60)
+            # 下限: 0 なら制約不要
+            if lo_h > 0:
+                if weekly_hard:
+                    model.Add(worked >= lo_h * 60)
+                else:
+                    # ソフト: 下限に対する不足分(分)を最小化する
+                    under_min = model.NewIntVar(0, lo_h * 60, f"ins_under_e{e.id}")
+                    over_min = model.NewIntVar(0, total_month_minutes, f"ins_over_e{e.id}")
+                    model.Add(worked - lo_h * 60 == over_min - under_min)
+                    insurance_under_terms.append(under_min)
+
         # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
         # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、
         # 従業員の対応可能シフト数(person-days)と単位を揃えて比較する。
@@ -453,6 +492,9 @@ class ShiftScheduler:
         if surplus_terms:
             # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
             obj += SURPLUS_WEIGHT * sum(surplus_terms)
+        if insurance_under_terms:
+            # 保険区分の下限に対する不足(分)を弱く嫌う（下限がソフトの段のみ）。
+            obj += INSURANCE_UNDER_WEIGHT * sum(insurance_under_terms)
         model.Minimize(obj)
 
         solver = cp_model.CpSolver()
@@ -465,11 +507,15 @@ class ShiftScheduler:
         status_str = solver.StatusName(status)
         assignments: list[dict[str, Any]] = []
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            worked_min_by_emp: dict[int, int] = {}
             for e in emps:
                 for d in days:
                     for p in pats:
                         if solver.Value(x[(e.id, d, p.id)]) == 1:
                             crosses = _crosses_midnight(p.start, p.end)
+                            worked_min_by_emp[e.id] = (
+                                worked_min_by_emp.get(e.id, 0) + p.worked_minutes
+                            )
                             assignments.append(
                                 {
                                     "employee_id": e.id,
@@ -483,6 +529,17 @@ class ShiftScheduler:
                             )
             if use_slack:
                 warnings.extend(self._slack_warnings(solver, slack_vars))
+            # 保険区分の下限を満たせなかった従業員を警告(下限をソフトに緩めた段でのみ起こる)。
+            for e in emps:
+                lo_h, _ = INSURANCE_HOURS_BOUNDS.get(
+                    e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
+                )
+                if lo_h > 0 and worked_min_by_emp.get(e.id, 0) < lo_h * 60:
+                    got_h = worked_min_by_emp.get(e.id, 0) / 60
+                    warnings.append(
+                        f"{e.name} は保険区分({e.insurance_type})の月間下限 {lo_h}h に達していません"
+                        f"（実働 約{got_h:.1f}h）。勤務可能時間帯・必要人数・保険区分を見直してください。"
+                    )
         else:
             warnings.append(
                 f"CP-SAT が解を見つけられませんでした ({status_str})。必要人数や制約を緩めてください。"
@@ -526,6 +583,18 @@ class ShiftScheduler:
 
 def _crosses_midnight(start: time, end: time) -> bool:
     return end <= start
+
+
+def worked_minutes_of(start: time, end: time, rest_minutes: int) -> int:
+    """パターンの実働(分) = スパン(分) − 休憩(分)。深夜跨ぎは終了に +24h する。
+
+    保険区分の月間実働時間制約(ADR-0006)に使う。分単位で厳密に扱う。
+    """
+    start_min = start.hour * 60 + start.minute
+    end_min = end.hour * 60 + end.minute
+    if end_min <= start_min:  # 深夜跨ぎ（例 17:00-1:00）
+        end_min += 24 * 60
+    return max(0, end_min - start_min - rest_minutes)
 
 
 def _window_hours(start: int, end: int) -> set[int]:

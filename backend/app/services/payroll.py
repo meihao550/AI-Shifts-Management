@@ -138,7 +138,8 @@ def calculate_payroll(
         base_wage = int(worked_hours * emp.hourly_wage)
         overnight_premium = int(overnight_hours * emp.hourly_wage * OVERNIGHT_PREMIUM_RATE)
         transport_cost_total = emp.transport_cost * len(emp_assignments)
-        insurance = _classify_insurance(worked_hours)
+        # 保険区分はマスタ属性(insurance_type)を優先。未設定時のみ実働時間から推定(ADR-0006)。
+        insurance = getattr(emp, "insurance_type", None) or _classify_insurance(worked_hours)
 
         # 有給: 日数 × 有給1日あたりの金額（勤務時間・保険判定には影響しない）
         paid_leave_dates = paid_leave_dates_by_emp.get(emp_id, [])

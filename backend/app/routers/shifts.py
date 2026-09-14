@@ -28,6 +28,7 @@ from app.services.scheduler import (
     LLMConstraints,
     PatternSpec,
     ShiftScheduler,
+    worked_minutes_of,
 )
 from app.services.staffing import default_hourly_rules, default_patterns
 
@@ -140,6 +141,7 @@ async def generate_shift(
                 hourly_wage=e.hourly_wage,
                 weekly_shifts_pinned=e.weekly_shifts_pinned,
                 is_dual_worker=e.is_dual_worker,
+                insurance_type=e.insurance_type,
                 available_start=e.available_start_hour,
                 available_end=e.available_end_hour,
             )
@@ -154,6 +156,7 @@ async def generate_shift(
                 end=p.end_time,
                 category=p.category,
                 rest_minutes=p.rest_minutes,
+                worked_minutes=worked_minutes_of(p.start_time, p.end_time, p.rest_minutes),
             )
             for p in patterns
         ],
