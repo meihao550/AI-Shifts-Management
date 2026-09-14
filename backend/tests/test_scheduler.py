@@ -5,6 +5,7 @@
 """
 
 from collections import defaultdict
+from datetime import date as _date
 from datetime import time, timedelta
 
 from app.services.scheduler import (
@@ -376,6 +377,34 @@ def test_available_window_blocks_out_of_window_pattern():
     # 夜勤(窓外)は一切割り当てられない。朝(窓内)には入る。
     assert all(a["shift_type"] != "evening" for a in result.assignments)
     assert any(a["shift_type"] == "morning" for a in result.assignments)
+
+
+# ---- 固定カレンダー展開の受け皿(ADR-0007) --------------------------------------
+
+
+def test_fixed_off_day_as_unavailable_blocks_assignment():
+    """固定カレンダーの休み(off)は unavailable として展開され、その日は配置されない。
+
+    ルーターが off→unavailable の AvailabilitySpec を渡す前提の、スケジューラ側検証。
+    """
+    from app.services.scheduler import AvailabilitySpec
+
+    # 2026-02-05 は木曜。ここを固定休み(unavailable)にする。
+    emp = _employee(1, "A")
+    sched = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[emp],
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 1)),
+        availabilities=[
+            AvailabilitySpec(employee_id=1, target_date=_date(2026, 2, 5), kind="unavailable")
+        ],
+        max_solve_seconds=10.0,
+    )
+    result = sched.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert all(a["target_date"] != _date(2026, 2, 5) for a in result.assignments)
 
 
 # ---- 連勤制限(ADR-0008) ---------------------------------------------------------

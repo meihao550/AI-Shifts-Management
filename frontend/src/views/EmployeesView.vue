@@ -17,11 +17,13 @@ import {
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import { useEmployeeStore } from '@/stores/employee'
 import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
 const message = useMessage()
+const router = useRouter()
 const showEdit = ref(false)
 const form = ref<Partial<Employee>>({})
 
@@ -148,7 +150,7 @@ const columns: DataTableColumns<Employee> = [
   {
     title: '操作',
     key: 'actions',
-    width: 160,
+    width: 240,
     render: (row) =>
       h('div', { style: 'display:flex;gap:8px' }, [
         h(
@@ -158,6 +160,14 @@ const columns: DataTableColumns<Employee> = [
             onClick: () => openEdit(row),
           },
           () => '編集',
+        ),
+        h(
+          NButton,
+          {
+            size: 'small',
+            onClick: () => router.push(`/employees/${row.id}/calendar`),
+          },
+          () => 'カレンダー',
         ),
         h(
           NPopconfirm,

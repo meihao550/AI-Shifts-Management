@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '人件費計算' },
   },
   {
+    path: '/employees/:employeeId/calendar',
+    name: 'employee-calendar',
+    component: () => import('@/views/EmployeeCalendarView.vue'),
+    meta: { title: '固定カレンダー', adminOnly: true },
+  },
+  {
     path: '/print/:shiftId',
     name: 'print-preview',
     component: () => import('@/views/PrintPreviewView.vue'),
