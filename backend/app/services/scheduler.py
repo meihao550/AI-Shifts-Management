@@ -50,6 +50,21 @@ SURPLUS_TOLERANCE = 1
 # 過剰1人・1時間あたりの弱ペナルティ。平準化(BALANCE_WEIGHT)より十分小さくし、
 # 「誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない」挙動にする。
 SURPLUS_WEIGHT = 2
+# 保険区分ごとの月間実働時間(時間)の下限・上限(ADR-0006)。上限 None は無制限。
+# social(社会保険): 120h以上 / employment(雇用保険): 80-119h / none(なし): 79h以下。
+INSURANCE_HOURS_BOUNDS: dict[str, tuple[int, int | None]] = {
+    "social": (120, None),
+    "employment": (80, 119),
+    "none": (0, 79),
+}
+# 保険区分の月間時間の下限違反(不足分1時間あたり)のソフトペナルティ。
+# 週回数と同格の弱い寄せにし、フォールバックで下限を緩めたときの誘導に使う。
+INSURANCE_UNDER_WEIGHT = 1
+# 連勤の上限（ADR-0008）。全従業員一律。生成月内の連続 MAX_CONSECUTIVE_DAYS+1 日を禁止。
+MAX_CONSECUTIVE_DAYS = 4
+# 確定出勤(固定カレンダーの work_hard, ADR-0009)を満たせないときのソフトペナルティ。
+# 不足(=最優先)より小さく、平準化より大きくして「できる限り確定出勤を守る」寄せにする。
+MANDATORY_WEIGHT = 100
 
 
 @dataclass(frozen=True)
@@ -61,6 +76,7 @@ class PatternSpec:
     end: time  # 終了時刻
     category: str  # morning|evening|night（開始時刻から自動判定）
     rest_minutes: int = 0  # 休憩(分)。割当へスナップショットする
+    worked_minutes: int = 0  # 実働(分) = スパン − 休憩。保険区分の月間時間制約に使う
 
 
 @dataclass(frozen=True)
@@ -73,6 +89,8 @@ class EmployeeSpec:
     # 新規従業員は既定 True。半端な週(月末月初)は常に按分ソフト、False は常にソフト。
     weekly_shifts_pinned: bool = True
     is_dual_worker: bool = False  # True ならWワーク専用パターンにも入れる（通常従業員は基本のみ）
+    # 保険区分(social/employment/none)。月間実働時間の上下限に使う(ADR-0006)。
+    insurance_type: str = "none"
     # 普段入れる時間帯（1時間単位）。両方 None なら制限なし。
     available_start: int | None = None
     available_end: int | None = None
@@ -82,7 +100,7 @@ class EmployeeSpec:
 class AvailabilitySpec:
     employee_id: int
     target_date: date
-    kind: str  # unavailable | preferred
+    kind: str  # unavailable | preferred | paid_leave | mandatory(確定出勤)
     shift_type: str | None = None
     note: str | None = None  # 希望日の時間帯 "HH:MM-HH:MM"（任意）
 
@@ -147,6 +165,19 @@ class ShiftScheduler:
                 continue
         return s
 
+    def _mandatory_lookup(self) -> dict[tuple[int, date], frozenset[str]]:
+        # 確定出勤（ADR-0009）。その日は必ず1シフト入れる。
+        # note にパターンコードのカンマ区切り(例 "morning,evening")があれば、そのいずれかの
+        # パターンに限定する。空集合ならその日の任意パターンでよい。
+        out: dict[tuple[int, date], frozenset[str]] = {}
+        for a in self.availabilities:
+            if a.kind == "mandatory":
+                codes = frozenset(
+                    c.strip() for c in (a.note or "").split(",") if c.strip()
+                )
+                out[(a.employee_id, a.target_date)] = codes
+        return out
+
     def _preferred_lookup(
         self,
     ) -> list[tuple[int, date, str | None, frozenset[int]]]:
@@ -209,6 +240,11 @@ class ShiftScheduler:
 
         unavailable = self._unavailable_lookup()
         preferred = self._preferred_lookup()
+        # 確定出勤。勤務不可と衝突する組は勤務不可を優先して除く。
+        # {(emp_id, date): 時間窓(拡張時集合。空なら任意)}
+        mandatory = {
+            k: v for k, v in self._mandatory_lookup().items() if k not in unavailable
+        }
 
         # 各パターンがカバーする「拡張時」の集合を先に計算しておく（深夜跨ぎ対応）。
         pat_hours: dict[int, set[int]] = {p.id: _pattern_hours(p.start, p.end) for p in pats}
@@ -237,6 +273,39 @@ class ShiftScheduler:
                 if (e.id, d) in unavailable:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
+
+        # Constraint: 確定出勤(ADR-0009)。その日は必ず1シフト入れる。対象パターン(note指定)が
+        # あれば、そのいずれかのパターンに限定する。
+        # ハード段(use_slack=False)では厳守。診断段(use_slack=True)では、物理的に不可能な
+        # ときのため強いペナルティのソフトに緩め、満たせなかった分は後で警告する。
+        mandatory_unmet_terms: list[cp_model.IntVar] = []
+        for e in emps:
+            for d in days:
+                key = (e.id, d)
+                if key not in mandatory:
+                    continue
+                codes = mandatory[key]
+                # 指定ありは選択パターン、指定なしは全パターンが対象。
+                eligible = [
+                    x[(e.id, d, p.id)]
+                    for p in pats
+                    if not codes or p.code in codes
+                ]
+                if use_slack:
+                    unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
+                    if eligible:
+                        model.Add(sum(eligible) + unmet >= 1)
+                    else:
+                        model.Add(unmet == 1)  # 該当パターン無し＝満たせない
+                    mandatory_unmet_terms.append(unmet)
+                elif eligible:
+                    model.Add(sum(eligible) == 1)
+                else:
+                    # 窓に合うパターンが無く確定出勤を満たせない → このハード段は解なしにして
+                    # 診断段へ回す（明示的な矛盾制約）。
+                    imp = model.NewBoolVar(f"mand_impossible_e{e.id}_{d.isoformat()}")
+                    model.Add(imp == 1)
+                    model.Add(imp == 0)
 
         # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
         # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
@@ -335,6 +404,46 @@ class ShiftScheduler:
                 model.Add(week_total - target == over - under)
                 penalties.append(over)
                 penalties.append(under)
+
+        # Constraint: 保険区分ごとの月間実働時間(分)の上下限(ADR-0006)。
+        # 上限(過労側・法令準拠)は常にハード。下限(不足側)は weekly_hard の時ハード、
+        # 他はソフト(不足分にペナルティ＋警告)にして週回数と同じくフォールバックで緩める。
+        insurance_under_terms: list[cp_model.IntVar] = []
+        total_month_minutes = sum(p.worked_minutes for p in pats) * len(days)
+        for e in emps:
+            lo_h, hi_h = INSURANCE_HOURS_BOUNDS.get(
+                e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
+            )
+            worked = sum(
+                x[(e.id, d, p.id)] * p.worked_minutes for d in days for p in pats
+            )
+            # 上限: 常にハード（雇用≤119h / なし≤79h。social は上限なし）
+            if hi_h is not None:
+                model.Add(worked <= hi_h * 60)
+            # 下限: 0 なら制約不要
+            if lo_h > 0:
+                if weekly_hard:
+                    model.Add(worked >= lo_h * 60)
+                else:
+                    # ソフト: 下限に対する不足分(分)を最小化する
+                    under_min = model.NewIntVar(0, lo_h * 60, f"ins_under_e{e.id}")
+                    over_min = model.NewIntVar(0, total_month_minutes, f"ins_over_e{e.id}")
+                    model.Add(worked - lo_h * 60 == over_min - under_min)
+                    insurance_under_terms.append(under_min)
+
+        # Hard: 連勤制限（ADR-0008）。生成月内で連続 MAX_CONSECUTIVE_DAYS+1 日すべて勤務を禁止。
+        # 各従業員・各スライディング窓で「窓内の勤務日数 ≤ MAX_CONSECUTIVE_DAYS」。
+        # x は「1日1パターン以下」制約済みなので works(e,d)=Σ_p x[e,d,p] は 0/1。
+        # 月をまたぐ連続は対象外（前月シフトは参照しない）。
+        win = MAX_CONSECUTIVE_DAYS + 1
+        if len(days) >= win:
+            for e in emps:
+                for i in range(len(days) - win + 1):
+                    window_days = days[i : i + win]
+                    model.Add(
+                        sum(x[(e.id, d, p.id)] for d in window_days for p in pats)
+                        <= MAX_CONSECUTIVE_DAYS
+                    )
 
         # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
         # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、
@@ -453,6 +562,12 @@ class ShiftScheduler:
         if surplus_terms:
             # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
             obj += SURPLUS_WEIGHT * sum(surplus_terms)
+        if insurance_under_terms:
+            # 保険区分の下限に対する不足(分)を弱く嫌う（下限がソフトの段のみ）。
+            obj += INSURANCE_UNDER_WEIGHT * sum(insurance_under_terms)
+        if mandatory_unmet_terms:
+            # 確定出勤の未達は強く嫌う（不足の次に優先。診断段のみ）。
+            obj += MANDATORY_WEIGHT * sum(mandatory_unmet_terms)
         model.Minimize(obj)
 
         solver = cp_model.CpSolver()
@@ -465,11 +580,15 @@ class ShiftScheduler:
         status_str = solver.StatusName(status)
         assignments: list[dict[str, Any]] = []
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            worked_min_by_emp: dict[int, int] = {}
             for e in emps:
                 for d in days:
                     for p in pats:
                         if solver.Value(x[(e.id, d, p.id)]) == 1:
                             crosses = _crosses_midnight(p.start, p.end)
+                            worked_min_by_emp[e.id] = (
+                                worked_min_by_emp.get(e.id, 0) + p.worked_minutes
+                            )
                             assignments.append(
                                 {
                                     "employee_id": e.id,
@@ -483,6 +602,40 @@ class ShiftScheduler:
                             )
             if use_slack:
                 warnings.extend(self._slack_warnings(solver, slack_vars))
+            # 確定出勤を満たせなかった (従業員, 日) を警告(診断段でのみ起こる)。
+            # 指定ありは「選択パターンで働いたか」まで確認する。
+            if mandatory:
+                assigned_code = {
+                    (a["employee_id"], a["target_date"]): a["shift_type"]
+                    for a in assignments
+                }
+                unmet = []
+                for key, codes in mandatory.items():
+                    code = assigned_code.get(key)
+                    if code is None or (codes and code not in codes):
+                        unmet.append(key)
+                unmet.sort()
+                if unmet:
+                    names = {e.id: e.name for e in emps}
+                    examples = "、".join(
+                        f"{names.get(eid, eid)} {d.isoformat()}" for eid, d in unmet[:3]
+                    )
+                    more = f" ほか{len(unmet) - 3}件" if len(unmet) > 3 else ""
+                    warnings.append(
+                        f"確定出勤を満たせませんでした: {len(unmet)}件（例: {examples}{more}）。"
+                        f"勤務可能時間帯・必要人数・連勤/保険の制約を見直してください。"
+                    )
+            # 保険区分の下限を満たせなかった従業員を警告(下限をソフトに緩めた段でのみ起こる)。
+            for e in emps:
+                lo_h, _ = INSURANCE_HOURS_BOUNDS.get(
+                    e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
+                )
+                if lo_h > 0 and worked_min_by_emp.get(e.id, 0) < lo_h * 60:
+                    got_h = worked_min_by_emp.get(e.id, 0) / 60
+                    warnings.append(
+                        f"{e.name} は保険区分({e.insurance_type})の月間下限 {lo_h}h に達していません"
+                        f"（実働 約{got_h:.1f}h）。勤務可能時間帯・必要人数・保険区分を見直してください。"
+                    )
         else:
             warnings.append(
                 f"CP-SAT が解を見つけられませんでした ({status_str})。必要人数や制約を緩めてください。"
@@ -526,6 +679,18 @@ class ShiftScheduler:
 
 def _crosses_midnight(start: time, end: time) -> bool:
     return end <= start
+
+
+def worked_minutes_of(start: time, end: time, rest_minutes: int) -> int:
+    """パターンの実働(分) = スパン(分) − 休憩(分)。深夜跨ぎは終了に +24h する。
+
+    保険区分の月間実働時間制約(ADR-0006)に使う。分単位で厳密に扱う。
+    """
+    start_min = start.hour * 60 + start.minute
+    end_min = end.hour * 60 + end.minute
+    if end_min <= start_min:  # 深夜跨ぎ（例 17:00-1:00）
+        end_min += 24 * 60
+    return max(0, end_min - start_min - rest_minutes)
 
 
 def _window_hours(start: int, end: int) -> set[int]:

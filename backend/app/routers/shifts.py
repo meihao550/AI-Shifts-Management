@@ -28,6 +28,7 @@ from app.services.scheduler import (
     LLMConstraints,
     PatternSpec,
     ShiftScheduler,
+    worked_minutes_of,
 )
 from app.services.staffing import default_hourly_rules, default_patterns
 
@@ -96,6 +97,20 @@ async def generate_shift(
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
 
+    # 休日/希望日(出勤ソフト)/確定出勤/有給 を AvailabilitySpec 化。
+    # 固定カレンダーは「曜日で一括登録」により具体日付の availability として保存されるため、
+    # ここでの特別扱いは不要（同じデータをシフト表カレンダーと共有＝同期。ADR-0007/0009）。
+    availability_specs = [
+        AvailabilitySpec(
+            employee_id=a.employee_id,
+            target_date=a.target_date,
+            kind=a.kind.value,
+            shift_type=a.shift_type,
+            note=a.note,
+        )
+        for a in availability_rows
+    ]
+
     # 禁止ペア（ハード制約 H-6）を読み込み、(a_id, b_id) のタプル列にする
     pair_rows = list(db.execute(select(EmployeePairConstraint)).scalars())
     forbidden_pairs = [(p.employee_a_id, p.employee_b_id) for p in pair_rows]
@@ -140,6 +155,7 @@ async def generate_shift(
                 hourly_wage=e.hourly_wage,
                 weekly_shifts_pinned=e.weekly_shifts_pinned,
                 is_dual_worker=e.is_dual_worker,
+                insurance_type=e.insurance_type,
                 available_start=e.available_start_hour,
                 available_end=e.available_end_hour,
             )
@@ -154,20 +170,12 @@ async def generate_shift(
                 end=p.end_time,
                 category=p.category,
                 rest_minutes=p.rest_minutes,
+                worked_minutes=worked_minutes_of(p.start_time, p.end_time, p.rest_minutes),
             )
             for p in patterns
         ],
         staffing_rules=staffing_map,
-        availabilities=[
-            AvailabilitySpec(
-                employee_id=a.employee_id,
-                target_date=a.target_date,
-                kind=a.kind.value,
-                shift_type=a.shift_type,
-                note=a.note,
-            )
-            for a in availability_rows
-        ],
+        availabilities=availability_specs,
         llm_constraints=llm_constraints,
         forbidden_pairs=forbidden_pairs,
     )

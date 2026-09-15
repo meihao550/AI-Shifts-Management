@@ -17,11 +17,13 @@ import {
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import { useEmployeeStore } from '@/stores/employee'
 import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
 const message = useMessage()
+const router = useRouter()
 const showEdit = ref(false)
 const form = ref<Partial<Employee>>({})
 
@@ -94,6 +96,18 @@ function windowLabel(e: Employee): string {
   return `${e.available_start_hour}:00–${e.available_end_hour}:00`
 }
 
+// 保険区分。月間実働時間のハード制約に使う(ADR-0006)。
+const insuranceOptions = [
+  { label: '社会保険 (月120h以上)', value: 'social' },
+  { label: '雇用保険 (月80〜119h)', value: 'employment' },
+  { label: 'なし (月79h以下)', value: 'none' },
+]
+const insuranceLabels: Record<string, string> = {
+  social: '社会保険',
+  employment: '雇用保険',
+  none: 'なし',
+}
+
 const columns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
@@ -115,6 +129,12 @@ const columns: DataTableColumns<Employee> = [
     render: (r) => (r.weekly_shifts_pinned ? '○' : ''),
   },
   {
+    title: '保険',
+    key: 'insurance_type',
+    width: 90,
+    render: (r) => insuranceLabels[r.insurance_type] ?? r.insurance_type,
+  },
+  {
     title: '普段の時間',
     key: 'available_start_hour',
     width: 120,
@@ -130,7 +150,7 @@ const columns: DataTableColumns<Employee> = [
   {
     title: '操作',
     key: 'actions',
-    width: 160,
+    width: 240,
     render: (row) =>
       h('div', { style: 'display:flex;gap:8px' }, [
         h(
@@ -140,6 +160,14 @@ const columns: DataTableColumns<Employee> = [
             onClick: () => openEdit(row),
           },
           () => '編集',
+        ),
+        h(
+          NButton,
+          {
+            size: 'small',
+            onClick: () => router.push(`/employees/${row.id}/calendar`),
+          },
+          () => 'カレンダー',
         ),
         h(
           NPopconfirm,
@@ -165,6 +193,7 @@ function openCreate() {
     is_dual_worker: false,
     weekly_shifts: 3,
     weekly_shifts_pinned: true,
+    insurance_type: 'none',
     role: 'employee',
     active: true,
     available_start_hour: null,
@@ -247,6 +276,12 @@ async function remove(id: number) {
             ONで完全な週はちょうど週回数だけ入れる（絶対遵守。半端な週は目安）
           </span>
         </NFormItem>
+        <NFormItem label="保険区分">
+          <NSelect v-model:value="form.insurance_type" :options="insuranceOptions" />
+        </NFormItem>
+        <p style="margin: -6px 0 8px 110px; color: var(--ink-3); font-size: 12px">
+          区分に応じて月間実働時間を制約します（社保≥120h / 雇用80〜119h / なし≤79h）。
+        </p>
         <NFormItem label="普段入れる時間">
           <NSpace align="center" :wrap="false" style="width: 100%">
             <NSelect

@@ -2,6 +2,9 @@
 
 export type UserRole = 'admin' | 'employee'
 
+// 保険区分(マスタ属性)。social=社会保険 / employment=雇用保険 / none=なし。
+export type InsuranceType = 'social' | 'employment' | 'none'
+
 export interface Me {
   id: number
   email: string
@@ -23,6 +26,8 @@ export interface Employee {
   weekly_shifts: number
   // 週回数を完全週でちょうど weekly_shifts 回のハード制約にするか(ADR-0003)。新規は既定 true。
   weekly_shifts_pinned: boolean
+  // 保険区分(マスタ属性)。月間実働時間のハード制約に使う(ADR-0006)。
+  insurance_type: InsuranceType
   role: UserRole
   active: boolean
   // 普段入れる時間帯（1時間単位, 0〜24）。両方 null なら制限なし。
@@ -37,7 +42,8 @@ export interface PairConstraint {
   employee_b_id: number
 }
 
-export type AvailabilityKind = 'unavailable' | 'preferred' | 'paid_leave'
+// 休日(unavailable) / 希望日=出勤ソフト(preferred) / 確定出勤(mandatory) / 有給(paid_leave)。
+export type AvailabilityKind = 'unavailable' | 'preferred' | 'mandatory' | 'paid_leave'
 
 export interface Availability {
   id: number
