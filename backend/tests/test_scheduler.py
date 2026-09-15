@@ -429,6 +429,37 @@ def test_mandatory_work_forces_assignment():
     assert _date(2026, 2, 5) in worked
 
 
+def test_mandatory_work_respects_time_window():
+    """時間窓つきの確定出勤は、その窓に収まるパターンで必ず配置される(ADR-0009)。
+
+    2/5 に 9:00-17:00 の確定出勤 → 朝(9-17)で入り、夜(17-1)には入らない。
+    """
+    from app.services.scheduler import AvailabilitySpec
+
+    emp = _employee(1, "A")
+    sched = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[emp],
+        patterns=[MORNING, EVENING],
+        staffing_rules={},  # 需要なしでも確定出勤で入る
+        availabilities=[
+            AvailabilitySpec(
+                employee_id=1,
+                target_date=_date(2026, 2, 5),
+                kind="mandatory",
+                note="09:00-17:00",
+            )
+        ],
+        max_solve_seconds=10.0,
+    )
+    result = sched.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    on_day = [a for a in result.assignments if a["target_date"] == _date(2026, 2, 5)]
+    assert len(on_day) == 1
+    assert on_day[0]["shift_type"] == "morning"  # 窓(9-17)に収まる朝で配置
+
+
 # ---- 連勤制限(ADR-0008) ---------------------------------------------------------
 
 

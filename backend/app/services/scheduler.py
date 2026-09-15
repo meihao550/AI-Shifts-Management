@@ -165,13 +165,15 @@ class ShiftScheduler:
                 continue
         return s
 
-    def _mandatory_lookup(self) -> set[tuple[int, date]]:
-        # 確定出勤（固定カレンダーの work_hard）。その日は必ず1シフト入れる(ADR-0009)。
-        s: set[tuple[int, date]] = set()
+    def _mandatory_lookup(self) -> dict[tuple[int, date], frozenset[int]]:
+        # 確定出勤（ADR-0009）。その日は必ず1シフト入れる。
+        # note "HH:MM-HH:MM" があれば、その時間窓に収まるパターンに限定する（1時間単位）。
+        # 窓なし(空集合)ならその日の任意パターンでよい。
+        out: dict[tuple[int, date], frozenset[int]] = {}
         for a in self.availabilities:
             if a.kind == "mandatory":
-                s.add((a.employee_id, a.target_date))
-        return s
+                out[(a.employee_id, a.target_date)] = _parse_note_hours(a.note)
+        return out
 
     def _preferred_lookup(
         self,
@@ -235,8 +237,11 @@ class ShiftScheduler:
 
         unavailable = self._unavailable_lookup()
         preferred = self._preferred_lookup()
-        # 確定出勤(work_hard)。勤務不可と衝突する組は勤務不可を優先して除く。
-        mandatory = self._mandatory_lookup() - unavailable
+        # 確定出勤。勤務不可と衝突する組は勤務不可を優先して除く。
+        # {(emp_id, date): 時間窓(拡張時集合。空なら任意)}
+        mandatory = {
+            k: v for k, v in self._mandatory_lookup().items() if k not in unavailable
+        }
 
         # 各パターンがカバーする「拡張時」の集合を先に計算しておく（深夜跨ぎ対応）。
         pat_hours: dict[int, set[int]] = {p.id: _pattern_hours(p.start, p.end) for p in pats}
@@ -266,21 +271,38 @@ class ShiftScheduler:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Constraint: 確定出勤(work_hard, ADR-0009)。その日は必ず1シフト入れる。
+        # Constraint: 確定出勤(ADR-0009)。その日は必ず1シフト入れる。時間窓(note指定)が
+        # あれば、その窓に収まるパターンに限定する（1時間単位）。
         # ハード段(use_slack=False)では厳守。診断段(use_slack=True)では、物理的に不可能な
         # ときのため強いペナルティのソフトに緩め、満たせなかった分は後で警告する。
         mandatory_unmet_terms: list[cp_model.IntVar] = []
         for e in emps:
             for d in days:
-                if (e.id, d) not in mandatory:
+                key = (e.id, d)
+                if key not in mandatory:
                     continue
-                works = sum(x[(e.id, d, p.id)] for p in pats)
+                hours = mandatory[key]
+                # 窓ありは窓に収まるパターン、窓なしは全パターンが対象。
+                eligible = [
+                    x[(e.id, d, p.id)]
+                    for p in pats
+                    if not hours or pat_hours[p.id] <= hours
+                ]
                 if use_slack:
                     unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
-                    model.Add(works + unmet >= 1)
+                    if eligible:
+                        model.Add(sum(eligible) + unmet >= 1)
+                    else:
+                        model.Add(unmet == 1)  # 該当パターン無し＝満たせない
                     mandatory_unmet_terms.append(unmet)
+                elif eligible:
+                    model.Add(sum(eligible) == 1)
                 else:
-                    model.Add(works == 1)
+                    # 窓に合うパターンが無く確定出勤を満たせない → このハード段は解なしにして
+                    # 診断段へ回す（明示的な矛盾制約）。
+                    imp = model.NewBoolVar(f"mand_impossible_e{e.id}_{d.isoformat()}")
+                    model.Add(imp == 1)
+                    model.Add(imp == 0)
 
         # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
         # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
@@ -577,10 +599,20 @@ class ShiftScheduler:
                             )
             if use_slack:
                 warnings.extend(self._slack_warnings(solver, slack_vars))
-            # 確定出勤(work_hard)を満たせなかった (従業員, 日) を警告(診断段でのみ起こる)。
+            # 確定出勤を満たせなかった (従業員, 日) を警告(診断段でのみ起こる)。
+            # 窓ありは「窓に収まるパターンで働いたか」まで確認する。
             if mandatory:
-                worked_keys = {(a["employee_id"], a["target_date"]) for a in assignments}
-                unmet = sorted(k for k in mandatory if k not in worked_keys)
+                pat_hours_by_code = {p.code: pat_hours[p.id] for p in pats}
+                assigned_hours = {
+                    (a["employee_id"], a["target_date"]): pat_hours_by_code[a["shift_type"]]
+                    for a in assignments
+                }
+                unmet = []
+                for key, hours in mandatory.items():
+                    ah = assigned_hours.get(key)
+                    if ah is None or (hours and not ah <= hours):
+                        unmet.append(key)
+                unmet.sort()
                 if unmet:
                     names = {e.id: e.name for e in emps}
                     examples = "、".join(

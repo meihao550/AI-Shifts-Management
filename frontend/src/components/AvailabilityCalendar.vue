@@ -28,6 +28,8 @@ const loading = ref(false)
 // 曜日で一括登録（毎月流用の手間軽減）。曜日は JS の getDay()（0=日..6=土）。
 const bulkWeekday = ref<number | null>(null)
 const bulkKind = ref<AvailabilityKind | 'clear' | null>(null)
+const bulkStart = ref<number | null>(null)
+const bulkEnd = ref<number | null>(null)
 const bulkWeekdayOptions = ['日', '月', '火', '水', '木', '金', '土'].map((l, i) => ({
   label: `${l}曜日`,
   value: i,
@@ -142,15 +144,16 @@ function openDay(d: Date) {
   showModal.value = true
 }
 
-// モーダルの「登録」。希望日のときだけ開始・終了「時」を note に保存する。
+// モーダルの「登録」。希望日・確定出勤のときは開始・終了「時」を note に保存する。
 // 終了 <= 開始 は翌日扱い（例 20:00-01:00 = 翌1:00）。解釈はバックエンドに合わせる。
+const NEEDS_TIME = new Set<AvailabilityKind>(['preferred', 'mandatory'])
 async function confirmAdd() {
   if (!modalDate.value || !modalKind.value) {
     message.warning('種別を選択してください')
     return
   }
   let note: string | null = null
-  if (modalKind.value === 'preferred') {
+  if (NEEDS_TIME.has(modalKind.value)) {
     if (startHour.value == null || endHour.value == null) {
       message.warning('開始・終了時刻を選択してください')
       return
@@ -184,6 +187,16 @@ async function applyBulk() {
     message.warning('曜日と種別を選択してください')
     return
   }
+  // 希望日・確定出勤は時間窓が必要。
+  let bulkNote: string | null = null
+  if (bulkKind.value === 'preferred' || bulkKind.value === 'mandatory') {
+    if (bulkStart.value == null || bulkEnd.value == null) {
+      message.warning('確定出勤・希望日は開始・終了時刻を選択してください')
+      return
+    }
+    const pad = (h: number) => String(h).padStart(2, '0')
+    bulkNote = `${pad(bulkStart.value)}:00-${pad(bulkEnd.value)}:00`
+  }
   const targets = days.value.filter((d) => d.getDay() === bulkWeekday.value)
   try {
     for (const d of targets) {
@@ -202,7 +215,7 @@ async function applyBulk() {
           target_date: iso,
           kind: bulkKind.value,
           shift_type: null,
-          note: null,
+          note: bulkNote,
         })
         availabilities.value.push(created)
       }
@@ -271,8 +284,13 @@ function dayColor(d: Date) {
         placeholder="種別"
         style="width: 170px"
       />
+      <template v-if="bulkKind === 'preferred' || bulkKind === 'mandatory'">
+        <NSelect v-model:value="bulkStart" :options="hourOptions" placeholder="開始" style="width: 90px" />
+        <span>-</span>
+        <NSelect v-model:value="bulkEnd" :options="hourOptions" placeholder="終了" style="width: 90px" />
+      </template>
       <NButton size="small" :disabled="!selectedEmployeeId" @click="applyBulk">当月へ適用</NButton>
-      <span class="hint">例: 木曜=確定出勤、他の曜日=休日。毎月この操作で流用できます。</span>
+      <span class="hint">例: 木曜=確定出勤 9:00-17:00。毎月この操作で流用できます。</span>
     </NSpace>
 
     <NSpin :show="loading">
@@ -338,7 +356,7 @@ function dayColor(d: Date) {
           </div>
         </div>
 
-        <!-- 種別を選択。希望日のときだけ時刻欄が出る -->
+        <!-- 種別を選択。希望日・確定出勤のときは時刻欄が出る -->
         <NRadioGroup v-model:value="modalKind">
           <NSpace vertical>
             <NRadio value="unavailable">休日として登録</NRadio>
@@ -348,7 +366,7 @@ function dayColor(d: Date) {
           </NSpace>
         </NRadioGroup>
 
-        <div v-if="modalKind === 'preferred'">
+        <div v-if="modalKind === 'preferred' || modalKind === 'mandatory'">
           <NSpace align="center">
             <span>開始</span>
             <NSelect
@@ -367,6 +385,7 @@ function dayColor(d: Date) {
           </NSpace>
           <p class="hint" style="margin: 6px 0 0">
             1時間単位で選択。終了が開始以前なら翌日扱い（例: 20:00→翌1:00）。
+            <template v-if="modalKind === 'mandatory'">確定出勤はこの時間に収まるシフトで必ず入ります。</template>
           </p>
         </div>
 
