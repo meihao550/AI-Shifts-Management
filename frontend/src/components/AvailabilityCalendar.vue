@@ -12,13 +12,24 @@ import {
   useMessage,
 } from 'naive-ui'
 import { useEmployeeStore } from '@/stores/employee'
+import { useRuleStore } from '@/stores/rule'
 import type { Availability, AvailabilityKind } from '@/types'
 
 // employeeId を渡すと従業員を固定（従業員セレクトを隠す）。従業員管理のカレンダーで使う。
 const props = defineProps<{ year: number; month: number; employeeId?: number }>()
 
 const employeeStore = useEmployeeStore()
+const ruleStore = useRuleStore()
 const message = useMessage()
+
+// 確定出勤の対象シフトパターン選択肢（コードを値にする）。
+const patternOptions = computed(() =>
+  ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
+)
+// コード → 表示名（登録済みタグの表示に使う）。
+function patternLabel(code: string): string {
+  return ruleStore.patterns.find((p) => p.code === code)?.label ?? code
+}
 
 const lockEmployee = computed(() => props.employeeId != null)
 const selectedEmployeeId = ref<number | null>(props.employeeId ?? null)
@@ -30,6 +41,7 @@ const bulkWeekday = ref<number | null>(null)
 const bulkKind = ref<AvailabilityKind | 'clear' | null>(null)
 const bulkStart = ref<number | null>(null)
 const bulkEnd = ref<number | null>(null)
+const bulkPatterns = ref<string[]>([]) // 確定出勤の対象パターンコード（曜日一括用）
 const bulkWeekdayOptions = ['日', '月', '火', '水', '木', '金', '土'].map((l, i) => ({
   label: `${l}曜日`,
   value: i,
@@ -47,6 +59,7 @@ const modalDate = ref<Date | null>(null)
 const modalKind = ref<AvailabilityKind | null>(null)
 const startHour = ref<number | null>(null) // 希望開始「時」(0-23)。1時間単位
 const endHour = ref<number | null>(null) // 希望終了「時」(0-23)。開始以前なら翌日扱い
+const modalPatterns = ref<string[]>([]) // 確定出勤の対象パターンコード（複数選択）
 
 // 0:00〜23:00 の1時間刻み
 const hourOptions = Array.from({ length: 24 }, (_, h) => ({ label: `${h}:00`, value: h }))
@@ -99,6 +112,7 @@ watch(
 
 onMounted(async () => {
   if (!employeeStore.employees.length) await employeeStore.fetchAll()
+  if (!ruleStore.patterns.length) await ruleStore.fetchPatterns()
   if (props.employeeId != null) {
     selectedEmployeeId.value = props.employeeId
   } else if (employeeStore.employees.length && !selectedEmployeeId.value) {
@@ -141,25 +155,30 @@ function openDay(d: Date) {
   modalKind.value = null
   startHour.value = null
   endHour.value = null
+  modalPatterns.value = []
   showModal.value = true
 }
 
-// モーダルの「登録」。希望日・確定出勤のときは開始・終了「時」を note に保存する。
-// 終了 <= 開始 は翌日扱い（例 20:00-01:00 = 翌1:00）。解釈はバックエンドに合わせる。
-const NEEDS_TIME = new Set<AvailabilityKind>(['preferred', 'mandatory'])
+// モーダルの「登録」。希望日は時刻窓、確定出勤は対象パターン(コード)を note に保存する。
 async function confirmAdd() {
   if (!modalDate.value || !modalKind.value) {
     message.warning('種別を選択してください')
     return
   }
   let note: string | null = null
-  if (NEEDS_TIME.has(modalKind.value)) {
+  if (modalKind.value === 'preferred') {
     if (startHour.value == null || endHour.value == null) {
       message.warning('開始・終了時刻を選択してください')
       return
     }
     const pad = (h: number) => String(h).padStart(2, '0')
     note = `${pad(startHour.value)}:00-${pad(endHour.value)}:00`
+  } else if (modalKind.value === 'mandatory') {
+    if (!modalPatterns.value.length) {
+      message.warning('確定出勤するシフトパターンを1つ以上選択してください')
+      return
+    }
+    note = modalPatterns.value.join(',')
   }
   await add(modalKind.value, modalDate.value, note)
   showModal.value = false
@@ -187,15 +206,21 @@ async function applyBulk() {
     message.warning('曜日と種別を選択してください')
     return
   }
-  // 希望日・確定出勤は時間窓が必要。
+  // 希望日は時間窓、確定出勤は対象シフトパターンが必要。
   let bulkNote: string | null = null
-  if (bulkKind.value === 'preferred' || bulkKind.value === 'mandatory') {
+  if (bulkKind.value === 'preferred') {
     if (bulkStart.value == null || bulkEnd.value == null) {
-      message.warning('確定出勤・希望日は開始・終了時刻を選択してください')
+      message.warning('希望日は開始・終了時刻を選択してください')
       return
     }
     const pad = (h: number) => String(h).padStart(2, '0')
     bulkNote = `${pad(bulkStart.value)}:00-${pad(bulkEnd.value)}:00`
+  } else if (bulkKind.value === 'mandatory') {
+    if (!bulkPatterns.value.length) {
+      message.warning('確定出勤するシフトパターンを1つ以上選択してください')
+      return
+    }
+    bulkNote = bulkPatterns.value.join(',')
   }
   const targets = days.value.filter((d) => d.getDay() === bulkWeekday.value)
   try {
@@ -243,6 +268,18 @@ const kindLabels: Record<AvailabilityKind, string> = {
   paid_leave: '有給',
 }
 
+// 登録タグの補足表示。確定出勤の note はパターンコードなので表示名に変換する。
+function noteDisplay(a: Availability): string {
+  if (!a.note) return ''
+  if (a.kind === 'mandatory') {
+    return a.note
+      .split(',')
+      .map((c) => patternLabel(c.trim()))
+      .join('・')
+  }
+  return a.note
+}
+
 function dayColor(d: Date) {
   const w = d.getDay()
   if (w === 0) return '#c92a2a'
@@ -284,13 +321,21 @@ function dayColor(d: Date) {
         placeholder="種別"
         style="width: 170px"
       />
-      <template v-if="bulkKind === 'preferred' || bulkKind === 'mandatory'">
+      <template v-if="bulkKind === 'preferred'">
         <NSelect v-model:value="bulkStart" :options="hourOptions" placeholder="開始" style="width: 90px" />
         <span>-</span>
         <NSelect v-model:value="bulkEnd" :options="hourOptions" placeholder="終了" style="width: 90px" />
       </template>
+      <NSelect
+        v-if="bulkKind === 'mandatory'"
+        v-model:value="bulkPatterns"
+        :options="patternOptions"
+        multiple
+        placeholder="対象シフトを選択"
+        style="width: 260px"
+      />
       <NButton size="small" :disabled="!selectedEmployeeId" @click="applyBulk">当月へ適用</NButton>
-      <span class="hint">例: 木曜=確定出勤 9:00-17:00。毎月この操作で流用できます。</span>
+      <span class="hint">例: 木曜=確定出勤(朝シフト)。毎月この操作で流用できます。</span>
     </NSpace>
 
     <NSpin :show="loading">
@@ -350,13 +395,13 @@ function dayColor(d: Date) {
               "
               size="small"
             >
-              {{ kindLabels[a.kind] }}<template v-if="a.note"> ({{ a.note }})</template>
+              {{ kindLabels[a.kind] }}<template v-if="a.note"> ({{ noteDisplay(a) }})</template>
             </NTag>
             <NButton size="tiny" quaternary type="error" @click="remove(a.id)">削除</NButton>
           </div>
         </div>
 
-        <!-- 種別を選択。希望日・確定出勤のときは時刻欄が出る -->
+        <!-- 種別を選択。希望日は時刻欄、確定出勤はシフトパターン選択が出る -->
         <NRadioGroup v-model:value="modalKind">
           <NSpace vertical>
             <NRadio value="unavailable">休日として登録</NRadio>
@@ -366,7 +411,7 @@ function dayColor(d: Date) {
           </NSpace>
         </NRadioGroup>
 
-        <div v-if="modalKind === 'preferred' || modalKind === 'mandatory'">
+        <div v-if="modalKind === 'preferred'">
           <NSpace align="center">
             <span>開始</span>
             <NSelect
@@ -385,7 +430,18 @@ function dayColor(d: Date) {
           </NSpace>
           <p class="hint" style="margin: 6px 0 0">
             1時間単位で選択。終了が開始以前なら翌日扱い（例: 20:00→翌1:00）。
-            <template v-if="modalKind === 'mandatory'">確定出勤はこの時間に収まるシフトで必ず入ります。</template>
+          </p>
+        </div>
+
+        <div v-if="modalKind === 'mandatory'">
+          <NSelect
+            v-model:value="modalPatterns"
+            :options="patternOptions"
+            multiple
+            placeholder="確定出勤するシフトを選択（複数可）"
+          />
+          <p class="hint" style="margin: 6px 0 0">
+            選んだシフトのいずれか1つで必ず勤務します。
           </p>
         </div>
 

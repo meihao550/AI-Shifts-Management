@@ -40,7 +40,7 @@ _Avoid_: メインシフト（廃止語）
 従業員管理の「カレンダー」は、シフト表の「休日・希望日」カレンダーと**同一コンポーネント・同一データ**（`EmployeeAvailability`）を従業員固定で表示したもの。編集は即同期する。毎月同じ曜日パターン（例: 木曜だけ確定出勤・他は休日）は「**曜日で一括登録**」で当月へ適用して流用する（[ADR-0007](docs/adr/0007-fixed-weekly-calendar.md)）。
 
 **確定出勤 (Mandatory Work)**:
-availability 種別 `mandatory`。その日は必ず1シフト入れる（通常段はハード、診断段は強いソフト＋警告）。開始・終了を1時間単位で指定でき（`note` "HH:MM-HH:MM"）、指定時はその窓に収まるパターンで配置する。希望日(`preferred`)＝出勤ソフト（弱い希望）と区別する（[ADR-0009](docs/adr/0009-mandatory-fixed-work.md)）。
+availability 種別 `mandatory`。その日は必ず1シフト入れる（通常段はハード、診断段は強いソフト＋警告）。対象シフトパターンを複数選択でき（`note` にパターンコードのカンマ区切り）、指定時はそのいずれかのパターンで配置する。希望日(`preferred`)＝出勤ソフト（弱い希望）と区別する（[ADR-0009](docs/adr/0009-mandatory-fixed-work.md)）。
 
 ### 勤務時間 (Working Time)
 

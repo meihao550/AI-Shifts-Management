@@ -165,14 +165,17 @@ class ShiftScheduler:
                 continue
         return s
 
-    def _mandatory_lookup(self) -> dict[tuple[int, date], frozenset[int]]:
+    def _mandatory_lookup(self) -> dict[tuple[int, date], frozenset[str]]:
         # 確定出勤（ADR-0009）。その日は必ず1シフト入れる。
-        # note "HH:MM-HH:MM" があれば、その時間窓に収まるパターンに限定する（1時間単位）。
-        # 窓なし(空集合)ならその日の任意パターンでよい。
-        out: dict[tuple[int, date], frozenset[int]] = {}
+        # note にパターンコードのカンマ区切り(例 "morning,evening")があれば、そのいずれかの
+        # パターンに限定する。空集合ならその日の任意パターンでよい。
+        out: dict[tuple[int, date], frozenset[str]] = {}
         for a in self.availabilities:
             if a.kind == "mandatory":
-                out[(a.employee_id, a.target_date)] = _parse_note_hours(a.note)
+                codes = frozenset(
+                    c.strip() for c in (a.note or "").split(",") if c.strip()
+                )
+                out[(a.employee_id, a.target_date)] = codes
         return out
 
     def _preferred_lookup(
@@ -271,8 +274,8 @@ class ShiftScheduler:
                     for p in pats:
                         model.Add(x[(e.id, d, p.id)] == 0)
 
-        # Constraint: 確定出勤(ADR-0009)。その日は必ず1シフト入れる。時間窓(note指定)が
-        # あれば、その窓に収まるパターンに限定する（1時間単位）。
+        # Constraint: 確定出勤(ADR-0009)。その日は必ず1シフト入れる。対象パターン(note指定)が
+        # あれば、そのいずれかのパターンに限定する。
         # ハード段(use_slack=False)では厳守。診断段(use_slack=True)では、物理的に不可能な
         # ときのため強いペナルティのソフトに緩め、満たせなかった分は後で警告する。
         mandatory_unmet_terms: list[cp_model.IntVar] = []
@@ -281,12 +284,12 @@ class ShiftScheduler:
                 key = (e.id, d)
                 if key not in mandatory:
                     continue
-                hours = mandatory[key]
-                # 窓ありは窓に収まるパターン、窓なしは全パターンが対象。
+                codes = mandatory[key]
+                # 指定ありは選択パターン、指定なしは全パターンが対象。
                 eligible = [
                     x[(e.id, d, p.id)]
                     for p in pats
-                    if not hours or pat_hours[p.id] <= hours
+                    if not codes or p.code in codes
                 ]
                 if use_slack:
                     unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
@@ -600,17 +603,16 @@ class ShiftScheduler:
             if use_slack:
                 warnings.extend(self._slack_warnings(solver, slack_vars))
             # 確定出勤を満たせなかった (従業員, 日) を警告(診断段でのみ起こる)。
-            # 窓ありは「窓に収まるパターンで働いたか」まで確認する。
+            # 指定ありは「選択パターンで働いたか」まで確認する。
             if mandatory:
-                pat_hours_by_code = {p.code: pat_hours[p.id] for p in pats}
-                assigned_hours = {
-                    (a["employee_id"], a["target_date"]): pat_hours_by_code[a["shift_type"]]
+                assigned_code = {
+                    (a["employee_id"], a["target_date"]): a["shift_type"]
                     for a in assignments
                 }
                 unmet = []
-                for key, hours in mandatory.items():
-                    ah = assigned_hours.get(key)
-                    if ah is None or (hours and not ah <= hours):
+                for key, codes in mandatory.items():
+                    code = assigned_code.get(key)
+                    if code is None or (codes and code not in codes):
                         unmet.append(key)
                 unmet.sort()
                 if unmet:
