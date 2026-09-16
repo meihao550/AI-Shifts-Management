@@ -20,6 +20,7 @@ const nav = computed(() => {
   if (auth.isAdmin) {
     items.push({ key: 'employees', label: '従業員管理', to: '/employees' })
     items.push({ key: 'rules', label: 'ルール設定', to: '/rules' })
+    items.push({ key: 'login-users', label: 'ログイン管理', to: '/login-users' })
   }
   return items
 })

@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'ルール設定', adminOnly: true },
   },
   {
+    path: '/login-users',
+    name: 'login-users',
+    component: () => import('@/views/LoginUsersView.vue'),
+    meta: { title: 'ログイン管理', adminOnly: true },
+  },
+  {
     path: '/payroll',
     name: 'payroll',
     component: () => import('@/views/PayrollView.vue'),

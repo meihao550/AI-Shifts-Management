@@ -34,13 +34,6 @@ export const useAuthStore = defineStore('auth', {
     setToken(token: string) {
       localStorage.setItem('token', token)
     },
-    async devLogin(email: string, name: string) {
-      const { data } = await api.post('/auth/dev-login', null, {
-        params: { email, name },
-      })
-      this.setToken(data.token.access_token)
-      this.user = data.user
-    },
     logout() {
       localStorage.removeItem('token')
       this.user = null
