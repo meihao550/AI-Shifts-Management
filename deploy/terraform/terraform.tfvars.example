@@ -1,19 +1,18 @@
 # このファイルを terraform.tfvars にコピーして値を埋めてください。
-# `terraform apply` は自動的に terraform.tfvars を読み込むので、
-# -var フラグを付ける必要がなくなります。
+# `terraform apply` は自動的に terraform.tfvars を読み込む。
 
 project_id = "ai-shifts-yourname-001"
 region     = "asia-northeast1"
 
-# Artifact Registry に push した Docker イメージの完全パス
+# Artifact Registry(リポジトリ名 ai-shifts) に push した Docker イメージの完全パス
 image_backend  = "asia-northeast1-docker.pkg.dev/ai-shifts-yourname-001/ai-shifts/backend:latest"
 image_frontend = "asia-northeast1-docker.pkg.dev/ai-shifts-yourname-001/ai-shifts/frontend:latest"
 
 # 空文字なら制限なし。Workspace ドメインで絞る場合は "example.co.jp" のように指定
 allowed_google_domain = ""
 
-# anthropic | openai | none
-llm_provider = "anthropic"
+# anthropic | openai | none （無料重視で none）
+llm_provider = "none"
 
-# Cloud SQL のマシンサイズ（開発: db-f1-micro、本番: db-custom-1-3840 など）
-db_instance_tier = "db-f1-micro"
+# 予算アラート通知先（任意）
+# budget_notification_email = "you@example.com"

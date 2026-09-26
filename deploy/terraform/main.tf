@@ -48,7 +48,7 @@ variable "allowed_google_domain" {
 
 variable "llm_provider" {
   type    = string
-  default = "anthropic"
+  default = "none"
 }
 
 variable "budget_amount_jpy" {
@@ -122,11 +122,12 @@ resource "google_cloud_run_v2_service" "backend" {
       }
       env {
         name  = "FRONTEND_ORIGIN"
-        value = "PLACEHOLDER_UPDATE_AFTER_FRONTEND_DEPLOYED"
+        value = google_cloud_run_v2_service.frontend.uri
       }
       env {
+        # backend 自身の URI は自己参照(循環)になるため、安定した既知URLを直接指定する。
         name  = "GOOGLE_REDIRECT_URI"
-        value = "PLACEHOLDER_UPDATE_AFTER_BACKEND_DEPLOYED"
+        value = "https://ai-shifts-backend-kc7umdofja-an.a.run.app/api/auth/google/callback"
       }
       env {
         name  = "ALLOWED_GOOGLE_DOMAIN"
@@ -254,9 +255,9 @@ data "google_project" "current" {}
 resource "google_secret_manager_secret_iam_member" "backend_secret_access" {
   for_each = toset(local.secret_names)
 
-  secret_id = each.key
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  secret_id  = each.key
+  role       = "roles/secretmanager.secretAccessor"
+  member     = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
   depends_on = [google_secret_manager_secret.app_secrets]
 }
 
