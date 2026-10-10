@@ -19,8 +19,13 @@ export const useAllowedLoginStore = defineStore('allowedLogin', {
         this.loading = false
       }
     },
-    async create(name: string, email: string, role: UserRole) {
-      const { data } = await api.post<AllowedLogin>('/allowed-logins', { name, email, role })
+    async create(name: string, email: string, role: UserRole, employeeId: number | null) {
+      const { data } = await api.post<AllowedLogin>('/allowed-logins', {
+        name,
+        email,
+        role,
+        employee_id: employeeId,
+      })
       this.items.push(data)
       return data
     },

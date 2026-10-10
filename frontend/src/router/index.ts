@@ -52,7 +52,7 @@ const routes: RouteRecordRaw[] = [
     path: '/payroll',
     name: 'payroll',
     component: () => import('@/views/PayrollView.vue'),
-    meta: { title: '人件費計算' },
+    meta: { title: '人件費計算', adminOnly: true },
   },
   {
     path: '/employees/:employeeId/calendar',

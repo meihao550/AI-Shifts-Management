@@ -11,6 +11,8 @@ export interface AllowedLogin {
   name: string
   email: string
   role: UserRole
+  // 種別が従業員のとき紐付ける従業員ID。管理者は null 可。
+  employee_id: number | null
 }
 
 export interface Me {

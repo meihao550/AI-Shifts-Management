@@ -22,13 +22,27 @@ def _memory_session() -> Session:
 
 
 def test_allowed_login_create_defaults_employee():
-    obj = AllowedLoginCreate(name="山田", email="yamada@example.com")
+    # 既定ロールは従業員。従業員ロールは紐付ける従業員(employee_id)が必須。
+    obj = AllowedLoginCreate(name="山田", email="yamada@example.com", employee_id=1)
     assert obj.role == UserRole.employee
+    assert obj.employee_id == 1
+
+
+def test_allowed_login_employee_requires_employee_id():
+    # 種別が従業員で employee_id 未指定は不可。
+    with pytest.raises(ValidationError):
+        AllowedLoginCreate(name="山田", email="yamada@example.com")
+
+
+def test_allowed_login_admin_allows_no_employee():
+    # 管理者は従業員の紐付けなしで作成できる。
+    obj = AllowedLoginCreate(name="管理者", email="admin@example.com", role=UserRole.admin)
+    assert obj.employee_id is None
 
 
 def test_allowed_login_create_rejects_bad_email():
     with pytest.raises(ValidationError):
-        AllowedLoginCreate(name="x", email="not-an-email")
+        AllowedLoginCreate(name="x", email="not-an-email", employee_id=1)
 
 
 # ---- ゲート挙動（許可リスト） ---------------------------------------------------

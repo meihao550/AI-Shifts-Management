@@ -44,13 +44,21 @@ onMounted(async () => {
 const shift = computed(() => shiftStore.shift)
 const payroll = computed(() => shiftStore.payroll)
 
-const totalHoursForMe = computed(() => {
-  if (!auth.user?.employee_id || !payroll.value) return null
-  return (
-    payroll.value.rows.find((r) => r.employee_id === auth.user?.employee_id)?.total_hours ?? 0
-  )
-})
+const isAdmin = computed(() => auth.isAdmin)
 
+// ログイン本人に紐付く従業員の payroll 行（未紐付け・未作成なら null）。
+const myPayrollRow = computed(() =>
+  auth.user?.employee_id && payroll.value
+    ? (payroll.value.rows.find((r) => r.employee_id === auth.user?.employee_id) ?? null)
+    : null,
+)
+
+const totalHoursForMe = computed(() => myPayrollRow.value?.total_hours ?? null)
+
+// 予定給与＝本人の見込み給与（当月 payroll の grand_total）。
+const myProjectedSalary = computed(() => myPayrollRow.value?.grand_total ?? null)
+
+// 会社全体の人件費合計（管理者のみ表示）。
 const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
 </script>
 
@@ -66,7 +74,8 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
         {{ n.message }}
     </NAlert>
 
-    <section class="cost-hero">
+    <!-- 管理者: 会社全体の人件費合計 -->
+    <section v-if="isAdmin" class="cost-hero">
       <div class="cost-hero__band" aria-hidden="true"></div>
       <p class="eyebrow">{{ monthLabel }} の人件費</p>
       <p class="cost-hero__value">
@@ -75,6 +84,19 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
       <NButton quaternary size="small" @click="router.push('/payroll')">
         内訳を見る
       </NButton>
+    </section>
+
+    <!-- 一般: 本人の予定給与（見込み） -->
+    <section v-else class="cost-hero">
+      <div class="cost-hero__band" aria-hidden="true"></div>
+      <p class="eyebrow">{{ monthLabel }} の予定給与</p>
+      <p v-if="myProjectedSalary !== null" class="cost-hero__value">
+        <span class="yen">¥</span>{{ myProjectedSalary.toLocaleString() }}
+      </p>
+      <template v-else>
+        <p class="cost-hero__value"><span class="yen">¥</span>—</p>
+        <p class="hint">今月のシフトが未作成、または従業員が未紐付けです。</p>
+      </template>
     </section>
 
     <NGrid :x-gap="16" :y-gap="16" :cols="2" responsive="screen">
