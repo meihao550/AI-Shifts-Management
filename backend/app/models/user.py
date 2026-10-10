@@ -47,5 +47,26 @@ class User(Base):
     )
 
 
+class AllowedLogin(Base):
+    """ログイン許可リスト。ここに載っている email だけが OAuth ログインできる。
+
+    role はログイン時に User.role へ反映する（許可リストが権限の真実源）。
+    """
+
+    __tablename__ = "allowed_logins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        SAEnum(UserRole, name="user_role"),
+        default=UserRole.employee,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # Avoid circular imports at type-check time
 from app.models.employee import Employee  # noqa: E402

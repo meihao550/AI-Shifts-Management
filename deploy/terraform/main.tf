@@ -17,6 +17,12 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # billingbudgets API は quota project(課金先)の指定が必須。
+  # アクセストークン認証だと既定で付かず 403 になるため、
+  # user_project_override + billing_project でプロジェクトを明示する。
+  user_project_override = true
+  billing_project       = var.project_id
 }
 
 ########################################
@@ -46,9 +52,15 @@ variable "allowed_google_domain" {
   default = ""
 }
 
+variable "backend_public_url" {
+  description = "デプロイ後の backend Cloud Run URL。二段階 apply: 1回目は空→URL確定後に設定して再apply。"
+  type        = string
+  default     = ""
+}
+
 variable "llm_provider" {
   type    = string
-  default = "anthropic"
+  default = "none"
 }
 
 variable "budget_amount_jpy" {
@@ -59,6 +71,12 @@ variable "budget_amount_jpy" {
 
 variable "budget_notification_email" {
   description = "予算アラート通知先メール。空なら通知チャンネルを作らない。"
+  type        = string
+  default     = ""
+}
+
+variable "billing_account_id" {
+  description = "請求先アカウントID（例: 01F6BD-5388CD-1C02E3）。予算アラート作成に必要。"
   type        = string
   default     = ""
 }
@@ -122,11 +140,13 @@ resource "google_cloud_run_v2_service" "backend" {
       }
       env {
         name  = "FRONTEND_ORIGIN"
-        value = "PLACEHOLDER_UPDATE_AFTER_FRONTEND_DEPLOYED"
+        value = google_cloud_run_v2_service.frontend.uri
       }
       env {
+        # backend 自身の URI は自己参照(循環)になるため変数で渡す（二段階 apply）。
+        # 空の間は /callback だけ入れておき、URL確定後に backend_public_url を設定して再apply。
         name  = "GOOGLE_REDIRECT_URI"
-        value = "PLACEHOLDER_UPDATE_AFTER_BACKEND_DEPLOYED"
+        value = var.backend_public_url == "" ? "" : "${var.backend_public_url}/api/auth/google/callback"
       }
       env {
         name  = "ALLOWED_GOOGLE_DOMAIN"
@@ -254,20 +274,15 @@ data "google_project" "current" {}
 resource "google_secret_manager_secret_iam_member" "backend_secret_access" {
   for_each = toset(local.secret_names)
 
-  secret_id = each.key
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  secret_id  = each.key
+  role       = "roles/secretmanager.secretAccessor"
+  member     = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
   depends_on = [google_secret_manager_secret.app_secrets]
 }
 
 ########################################
 # Budget alert
 ########################################
-data "google_billing_account" "linked" {
-  count           = var.budget_notification_email == "" ? 0 : 1
-  billing_account = data.google_project.current.billing_account
-}
-
 resource "google_monitoring_notification_channel" "email" {
   count        = var.budget_notification_email == "" ? 0 : 1
   display_name = "Budget alert email"
@@ -280,7 +295,7 @@ resource "google_monitoring_notification_channel" "email" {
 
 resource "google_billing_budget" "monthly_cap" {
   count           = var.budget_notification_email == "" ? 0 : 1
-  billing_account = data.google_billing_account.linked[0].id
+  billing_account = var.billing_account_id
   display_name    = "AI-Shifts monthly budget"
 
   budget_filter {

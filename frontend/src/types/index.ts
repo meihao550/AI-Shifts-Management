@@ -5,6 +5,14 @@ export type UserRole = 'admin' | 'employee'
 // 保険区分(マスタ属性)。social=社会保険 / employment=雇用保険 / none=なし。
 export type InsuranceType = 'social' | 'employment' | 'none'
 
+// ログイン許可リスト。ここに載っている email だけログインできる。role は権限。
+export interface AllowedLogin {
+  id: number
+  name: string
+  email: string
+  role: UserRole
+}
+
 export interface Me {
   id: number
   email: string

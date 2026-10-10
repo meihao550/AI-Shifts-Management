@@ -6,16 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY pyproject.toml ./
-RUN pip install --upgrade pip \
-    && pip install -e ".[dev]"
-
+# 依存はすべて manylinux wheel で入るため build-essential は不要。
+# 本番イメージは dev 依存(pytest/ruff/mypy 等)を含めない（Artifact Registry 容量削減）。
 COPY . .
+RUN pip install --upgrade pip && pip install -e .
 
 EXPOSE 8000
 

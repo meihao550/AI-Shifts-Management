@@ -22,3 +22,14 @@ class MeResponse(BaseModel):
 class LoginResponse(BaseModel):
     token: Token
     user: MeResponse
+
+
+class AllowedLoginCreate(BaseModel):
+    name: str
+    email: EmailStr
+    role: UserRole = UserRole.employee
+
+
+class AllowedLoginRead(AllowedLoginCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int

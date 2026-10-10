@@ -7,6 +7,10 @@ interface State {
   hydrated: boolean
 }
 
+// 起動時に router guard と App.vue が同時に restore() を呼んでも /auth/me が
+// 二重に飛ばないよう、進行中のリクエストを1本に共有する（モジュールスコープ）。
+let inflight: Promise<void> | null = null
+
 export const useAuthStore = defineStore('auth', {
   state: (): State => ({ user: null, hydrated: false }),
   getters: {
@@ -14,32 +18,38 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (s) => s.user?.role === 'admin',
   },
   actions: {
-    async restore() {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        this.user = null
-        this.hydrated = true
+    // force=true はログイン直後（setToken 後）に最新の user を取り直すときだけ使う。
+    async restore(force = false) {
+      if (this.hydrated && !force) return
+      if (inflight) {
+        await inflight
         return
       }
+      inflight = (async () => {
+        const token = localStorage.getItem('token')
+        if (!token) {
+          this.user = null
+          this.hydrated = true
+          return
+        }
+        try {
+          const { data } = await api.get<Me>('/auth/me')
+          this.user = data
+        } catch {
+          localStorage.removeItem('token')
+          this.user = null
+        } finally {
+          this.hydrated = true
+        }
+      })()
       try {
-        const { data } = await api.get<Me>('/auth/me')
-        this.user = data
-      } catch {
-        localStorage.removeItem('token')
-        this.user = null
+        await inflight
       } finally {
-        this.hydrated = true
+        inflight = null
       }
     },
     setToken(token: string) {
       localStorage.setItem('token', token)
-    },
-    async devLogin(email: string, name: string) {
-      const { data } = await api.post('/auth/dev-login', null, {
-        params: { email, name },
-      })
-      this.setToken(data.token.access_token)
-      this.user = data.user
     },
     logout() {
       localStorage.removeItem('token')
