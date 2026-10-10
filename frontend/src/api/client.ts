@@ -1,9 +1,11 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// backend のベースURL（本番はビルド時に VITE_API_BASE_URL を焼き込む）。
+// OAuth ログインの遷移先など axios 以外でも使うため単一の真実源として export する。
+export const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export const api = axios.create({
-  baseURL: `${baseURL}/api`,
+  baseURL: `${apiBase}/api`,
   timeout: 30000,
 })
 

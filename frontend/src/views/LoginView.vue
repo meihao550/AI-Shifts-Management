@@ -2,9 +2,9 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { NButton, NCard } from 'naive-ui'
+import { apiBase } from '@/api/client'
 
 const route = useRoute()
-const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 // OAuth コールバックで許可リスト外だった場合、?error=not_allowed で戻される。
 const notAllowed = computed(() => route.query.error === 'not_allowed')

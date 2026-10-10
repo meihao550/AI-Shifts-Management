@@ -12,7 +12,7 @@ onMounted(async () => {
   const token = route.query.token as string | undefined
   if (token) {
     auth.setToken(token)
-    await auth.restore()
+    await auth.restore(true) // 既に hydrated 済みでも、ログイン直後は user を取り直す
     router.replace('/dashboard')
   } else {
     router.replace('/login')

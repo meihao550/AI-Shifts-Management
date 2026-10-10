@@ -2,7 +2,8 @@
 
 生成 AI（LLM）と OR-tools CP-SAT による制約プログラミングを組み合わせた、シフト自動作成 / 人件費計算 Web アプリです。
 
-- **本番環境**: AWSで構築する。
+- **本番環境**: GCP Cloud Run + Neon (Postgres) で稼働（月額 ¥0 運用）。
+- **使い方ガイド（エンドユーザー向け）**: [`docs/USAGE.md`](docs/USAGE.md)
 - **企画書**: [`docs/requirements.md`](docs/requirements.md)
 - **チュートリアル（初心者向け）**: [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
 - **デプロイ手順**: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
@@ -138,7 +139,7 @@ cd frontend && npm run test:unit
 
 本番デプロイの詳細手順は [`deploy/DEPLOY.md`](deploy/DEPLOY.md) を参照。
 
-- **推奨構成**: Supabase (Postgres) + Cloud Run (backend / frontend) — **月額 ¥0**（無料枠内）
+- **推奨構成**: Neon (Postgres) + Cloud Run (backend / frontend) — **月額 ¥0**（無料枠内）
 - 予算アラート ¥100/月 で自動通知（Cloud Billing）
 
 ---
