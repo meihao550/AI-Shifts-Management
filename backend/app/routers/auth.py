@@ -47,6 +47,7 @@ def _persist_or_update_user(db: Session, info: dict) -> User | None:
             picture_url=info.get("picture"),
             google_sub=info.get("sub"),
             role=allowed.role,
+            employee_id=allowed.employee_id,
         )
         db.add(user)
     else:
@@ -54,6 +55,7 @@ def _persist_or_update_user(db: Session, info: dict) -> User | None:
         user.picture_url = info.get("picture") or user.picture_url
         user.google_sub = info.get("sub") or user.google_sub
         user.role = allowed.role  # 許可リストの権限を反映
+        user.employee_id = allowed.employee_id  # 紐付け先従業員も許可リストを真実源に同期
     db.commit()
     db.refresh(user)
     return user

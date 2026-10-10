@@ -63,6 +63,10 @@ class AllowedLogin(Base):
         default=UserRole.employee,
         nullable=False,
     )
+    # 紐付け先の従業員。種別が employee のとき必須（ログイン時に User.employee_id へ同期）。
+    employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser
 from app.core.database import get_db
+from app.models.employee import Employee
 from app.models.user import AllowedLogin, UserRole
 from app.schemas.auth import AllowedLoginCreate, AllowedLoginRead
 
@@ -31,7 +32,15 @@ def create_allowed(
     ).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=409, detail="この email は既に登録されています")
-    row = AllowedLogin(name=payload.name, email=email, role=payload.role)
+    # 従業員の紐付けが指定されていれば実在チェック。
+    if payload.employee_id is not None and db.get(Employee, payload.employee_id) is None:
+        raise HTTPException(status_code=400, detail="指定された従業員が見つかりません")
+    row = AllowedLogin(
+        name=payload.name,
+        email=email,
+        role=payload.role,
+        employee_id=payload.employee_id,
+    )
     db.add(row)
     db.commit()
     db.refresh(row)

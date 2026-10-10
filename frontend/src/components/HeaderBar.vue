@@ -12,18 +12,28 @@ const auth = useAuthStore()
 const currentTitle = computed(() => (route.meta.title as string) ?? '')
 
 const nav = computed(() => {
+  // 一般ユーザーはダッシュボードとシフト表のみ。それ以外は管理者だけ。
   const items = [
     { key: 'dashboard', label: 'ダッシュボード', to: '/dashboard' },
     { key: 'shift', label: 'シフト表', to: '/shift' },
-    { key: 'payroll', label: '人件費', to: '/payroll' },
   ]
   if (auth.isAdmin) {
+    items.push({ key: 'payroll', label: '人件費', to: '/payroll' })
     items.push({ key: 'employees', label: '従業員管理', to: '/employees' })
     items.push({ key: 'rules', label: 'ルール設定', to: '/rules' })
     items.push({ key: 'login-users', label: 'ログイン管理', to: '/login-users' })
   }
   return items
 })
+
+// 狭い画面(≤1200px)用ハンバーガーの項目。key に遷移先パスを入れて select で push。
+const dropdownOptions = computed(() => nav.value.map((i) => ({ label: i.label, key: i.to })))
+function handleNavSelect(key: string) {
+  router.push(key)
+}
+
+// public/ 配信物。静的 src だとビルド時に import 解決されるため :src（実行時参照）で渡す。
+const logoSrc = '/favicon.png'
 
 const showLogoutConfirm = ref(false)
 
@@ -38,7 +48,7 @@ function doLogout() {
   <header class="header">
     <div class="header-inner">
       <RouterLink to="/dashboard" class="brand">
-        <span class="mark" aria-hidden="true">勤</span>
+        <img class="mark-img" :src="logoSrc" alt="" aria-hidden="true" />
         <span class="logo">シフト勤務表</span>
         <span v-if="currentTitle" class="pill">{{ currentTitle }}</span>
       </RouterLink>
@@ -47,6 +57,16 @@ function doLogout() {
           {{ item.label }}
         </RouterLink>
       </nav>
+      <div class="nav-hamburger">
+        <NDropdown
+          trigger="click"
+          placement="bottom-end"
+          :options="dropdownOptions"
+          @select="handleNavSelect"
+        >
+          <NButton quaternary class="hamburger-btn" aria-label="メニュー">☰</NButton>
+        </NDropdown>
+      </div>
       <div class="user">
         <NButton size="small" quaternary class="logout-btn" @click="showLogoutConfirm = true">
           ログアウト
@@ -101,16 +121,12 @@ function doLogout() {
   color: var(--ink);
 }
 
-.mark {
-  display: grid;
-  place-items: center;
+.mark-img {
   width: 30px;
   height: 30px;
   border-radius: 7px;
-  background: var(--indigo);
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
+  object-fit: cover;
+  display: block;
 }
 
 .logo {
@@ -169,5 +185,36 @@ function doLogout() {
   margin-left: 8px;
   font-size: 11px;
   color: var(--ink-3);
+}
+
+/* ハンバーガーは広い画面では隠す。 */
+.nav-hamburger {
+  display: none;
+}
+.hamburger-btn {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 1200px 以下: inline ナビをハンバーガーに集約し、横溢れを防ぐ。 */
+@media (max-width: 1200px) {
+  .nav {
+    display: none;
+  }
+  .nav-hamburger {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
+  }
+  .header-inner {
+    gap: 16px;
+  }
+  .brand {
+    min-width: auto;
+  }
+  /* 権限ラベルは省略して幅を確保（名前・アバターは残す）。 */
+  .role {
+    display: none;
+  }
 }
 </style>
