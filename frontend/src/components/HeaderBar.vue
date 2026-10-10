@@ -35,6 +35,12 @@ function handleNavSelect(key: string) {
 // public/ 配信物。静的 src だとビルド時に import 解決されるため :src（実行時参照）で渡す。
 const logoSrc = '/favicon.png'
 
+// アバター click で開くユーザーメニュー（ログアウト）。
+const userMenuOptions = [{ label: 'ログアウト', key: 'logout' }]
+function handleUserMenu(key: string) {
+  if (key === 'logout') showLogoutConfirm.value = true
+}
+
 const showLogoutConfirm = ref(false)
 
 function doLogout() {
@@ -60,22 +66,41 @@ function doLogout() {
       <div class="nav-hamburger">
         <NDropdown
           trigger="click"
+          size="large"
           placement="bottom-end"
           :options="dropdownOptions"
           @select="handleNavSelect"
         >
-          <NButton quaternary class="hamburger-btn" aria-label="メニュー">☰</NButton>
+          <button type="button" class="hamburger-btn" aria-label="メニュー">
+            <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 7h16M4 12h16M4 17h16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
         </NDropdown>
       </div>
       <div class="user">
-        <NButton size="small" quaternary class="logout-btn" @click="showLogoutConfirm = true">
-          ログアウト
-        </NButton>
         <template v-if="auth.user">
-          <NAvatar v-if="auth.user.picture_url" round size="small" :src="auth.user.picture_url"
-            style="margin-right: 8px" />
-          <span>{{ auth.user.name }}</span>
-          <span class="role">{{ auth.user.role === 'admin' ? '管理者' : '社員' }}</span>
+          <NDropdown
+            trigger="click"
+            size="large"
+            placement="bottom-end"
+            :options="userMenuOptions"
+            @select="handleUserMenu"
+          >
+            <button type="button" class="user-trigger" aria-label="ユーザーメニュー">
+              <NAvatar round size="small" :src="auth.user.picture_url || undefined">
+                {{ auth.user.name.charAt(0) }}
+              </NAvatar>
+              <span class="user-name">{{ auth.user.name }}</span>
+              <span class="role">{{ auth.user.role === 'admin' ? '管理者' : '社員' }}</span>
+            </button>
+          </NDropdown>
         </template>
       </div>
     </div>
@@ -177,12 +202,30 @@ function doLogout() {
   gap: 8px;
 }
 
-.user :deep(.n-button) {
+/* アバター+名前をまとめた click ターゲット（押すとログアウトメニュー）。 */
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
   color: var(--ink);
+  font: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.user-trigger:hover {
+  background: var(--panel-strip);
+  border-color: var(--line);
+}
+.user-name {
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .role {
-  margin-left: 8px;
   font-size: 11px;
   color: var(--ink-3);
 }
@@ -192,8 +235,21 @@ function doLogout() {
   display: none;
 }
 .hamburger-btn {
-  font-size: 20px;
-  line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.hamburger-btn:hover {
+  background: var(--panel-strip);
+  border-color: var(--indigo);
+  color: var(--indigo-700);
 }
 
 /* 1200px 以下: inline ナビをハンバーガーに集約し、横溢れを防ぐ。 */
