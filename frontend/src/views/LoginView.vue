@@ -46,9 +46,6 @@ function loginWithGoogle() {
   justify-content: center;
   padding: 24px;
   background-color: var(--paper);
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 28px 28px;
 }
 
 .login-card {
