@@ -36,3 +36,50 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
     </RouterLink>
   </div>
 </template>
+
+<style scoped>
+/* モックの通り、角丸タイルを3列で並べる。PC では中央寄せ。 */
+.launcher {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px 16px;
+  max-width: 560px;
+  margin: 8px auto 0;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.tile__box {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 22px;
+  box-shadow: var(--shadow-panel);
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.tile:hover .tile__box {
+  transform: translateY(-2px);
+  border-color: var(--indigo);
+  box-shadow: 0 4px 14px rgba(25, 28, 24, 0.1);
+}
+.tile:active .tile__box {
+  transform: translateY(0);
+}
+.tile__icon {
+  font-size: 40px;
+  line-height: 1;
+}
+.tile__label {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+</style>
