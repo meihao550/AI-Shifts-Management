@@ -16,7 +16,7 @@ interface Tile {
 // スマホのホーム画面のように、各ページへ飛べるアイコンタイル。
 // icon は絵文字の仮置き（後で画像へ差し替え可能）。
 const allTiles: Tile[] = [
-  { key: 'my-page', label: 'マイページ', to: '/dashboard', icon: '🏠' },
+  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '🏠' },
   { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
   { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
   { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },

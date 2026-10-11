@@ -21,8 +21,8 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'ホーム' },
   },
   {
-    path: '/dashboard',
-    name: 'dashboard',
+    path: '/mypage',
+    name: 'my-page',
     component: () => import('@/views/DashboardView.vue'),
     meta: { title: 'マイページ' },
   },
@@ -84,7 +84,7 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.adminOnly && auth.user?.role !== 'admin') {
-    return { name: 'dashboard' }
+    return { name: 'my-page' }
   }
 })
 
