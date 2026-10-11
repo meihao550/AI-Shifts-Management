@@ -1,0 +1,123 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ai-shifts-ziyin-260930
+  REGION: asia-northeast1
+  REPO: asia-northeast1-docker.pkg.dev/ai-shifts-ziyin-260930/ai-shifts
+  # frontend にビルド時に焼き込む backend の公開URL
+  BACKEND_URL: https://ai-shifts-backend-uckqhsdofq-an.a.run.app
+
+jobs:
+  # デプロイ前のゲート（既存 CI と同等）。失敗したら deploy は走らない。
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shifts
+          POSTGRES_PASSWORD: shifts_password
+          POSTGRES_DB: shifts_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://shifts:shifts_password@localhost:5432/shifts_db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint (backend)
+        working-directory: backend
+        run: ruff check .
+      - name: Test (backend)
+        working-directory: backend
+        run: pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend
+        working-directory: frontend
+        run: npm install
+      - name: Build (frontend)
+        working-directory: frontend
+        run: npm run build
+      - name: Test (frontend)
+        working-directory: frontend
+        run: npm run test:unit -- --run
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Workload Identity 連携で OIDC トークンを発行するため
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      # GitHub Actions ランナーは amd64 のため QEMU 不要でそのまま build できる。
+      - name: Build & push backend image
+        run: |
+          docker build -t "$REPO/backend:$GITHUB_SHA" -t "$REPO/backend:latest" ./backend
+          docker push "$REPO/backend:$GITHUB_SHA"
+          docker push "$REPO/backend:latest"
+
+      - name: Build & push frontend image
+        run: |
+          docker build --target prod --build-arg VITE_API_BASE_URL="$BACKEND_URL" \
+            -t "$REPO/frontend:$GITHUB_SHA" -t "$REPO/frontend:latest" ./frontend
+          docker push "$REPO/frontend:$GITHUB_SHA"
+          docker push "$REPO/frontend:latest"
+
+      # Neon 本番へスキーマ変更を先行適用（新 backend 起動前）。
+      - name: Run DB migrations (Neon)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          alembic upgrade head
+
+      # --image のみ更新。env/secrets/スケーリング等の既存設定は保持される。
+      - name: Deploy backend (Cloud Run)
+        run: |
+          gcloud run deploy ai-shifts-backend \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --image "$REPO/backend:$GITHUB_SHA"
+
+      - name: Deploy frontend (Cloud Run)
+        run: |
+          gcloud run deploy ai-shifts-frontend \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --image "$REPO/frontend:$GITHUB_SHA"
