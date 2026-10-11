@@ -62,12 +62,8 @@ body {
   font-family: 'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif;
   font-variant-numeric: tabular-nums; /* 時間・金額を縦に揃える */
   -webkit-font-smoothing: antialiased;
-  /* 作業台の方眼を極薄で敷く（この題材の唯一の背景テクスチャ） */
+  /* 背景は無地の紙色（方眼テクスチャは廃止） */
   background-color: var(--paper);
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: center top;
 }
 
 /* 数字を主役にする表示用ユーティリティ */

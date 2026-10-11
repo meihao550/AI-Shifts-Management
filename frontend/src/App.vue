@@ -139,9 +139,6 @@ const themeOverrides = {
   justify-content: center;
   gap: 16px;
   background-color: var(--paper);
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 28px 28px;
 }
 .boot-text {
   margin: 0;

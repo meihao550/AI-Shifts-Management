@@ -1,16 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NEmpty,
-  NGrid,
-  NGridItem,
-  NSpin,
-  NTag,
-} from 'naive-ui'
+import { NAlert, NButton, NSpin, NTag } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
@@ -99,53 +90,51 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
       </template>
     </section>
 
-    <NGrid :x-gap="16" :y-gap="16" :cols="2" responsive="screen">
-      <NGridItem>
-        <NCard title="自分の勤務時間">
-          <p v-if="totalHoursForMe !== null" class="stat-number">
-            {{ totalHoursForMe }}<span class="unit">h</span>
-          </p>
-          <NEmpty v-else description="従業員リンクなし" />
-        </NCard>
-      </NGridItem>
-      <NGridItem>
-        <NCard title="シフト状態">
-          <div v-if="shift" class="status-row">
-            <NTag :type="shift.status === 'finalized' ? 'success' : 'default'" size="large">
-              {{
-                shift.status === 'finalized'
-                  ? '確定済み'
-                  : shift.status === 'published'
-                    ? '公開中'
-                    : 'ドラフト'
-              }}
-            </NTag>
-            <span class="hint">割当 {{ shift.assignments.length }} 件</span>
-          </div>
-          <NEmpty v-else description="今月のシフトは未作成" />
-        </NCard>
-      </NGridItem>
-    </NGrid>
-
-    <NCard title="シフト概要" style="margin-top: 24px">
-      <NSpin :show="loading">
-        <div v-if="shift && shift.assignments.length" class="preview">
-          <p>
-            {{ monthLabel }} のシフトが登録されています。詳細な編集・生成はシフト表画面へ。
-          </p>
-          <NButton type="primary" @click="router.push('/shift')">シフト表を開く</NButton>
-        </div>
-        <div v-else class="preview">
-          <NEmpty description="今月のシフトはまだ作成されていません">
-            <template #extra>
-              <NButton type="primary" @click="router.push('/shift')">
-                シフト表作成
-              </NButton>
+    <!-- カードのグリッドではなく、区切り線で分けた一覧にして見やすく -->
+    <NSpin :show="loading">
+      <section class="panel info-list">
+        <div class="info-row">
+          <span class="info-label">自分の勤務時間</span>
+          <span class="info-value">
+            <template v-if="totalHoursForMe !== null">
+              <span class="num">{{ totalHoursForMe }}</span><span class="unit">h</span>
             </template>
-          </NEmpty>
+            <span v-else class="muted">従業員リンクなし</span>
+          </span>
         </div>
-      </NSpin>
-    </NCard>
+
+        <div class="info-row">
+          <span class="info-label">シフト状態</span>
+          <span class="info-value">
+            <template v-if="shift">
+              <NTag :type="shift.status === 'finalized' ? 'success' : 'default'">
+                {{
+                  shift.status === 'finalized'
+                    ? '確定済み'
+                    : shift.status === 'published'
+                      ? '公開中'
+                      : 'ドラフト'
+                }}
+              </NTag>
+              <span class="hint">割当 {{ shift.assignments.length }} 件</span>
+            </template>
+            <span v-else class="muted">今月のシフトは未作成</span>
+          </span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">シフト概要</span>
+          <span class="info-value">
+            <span v-if="!(shift && shift.assignments.length)" class="muted">
+              今月のシフトはまだ作成されていません
+            </span>
+            <NButton type="primary" size="small" @click="router.push('/shift')">
+              {{ shift && shift.assignments.length ? 'シフト表を開く' : 'シフト表作成' }}
+            </NButton>
+          </span>
+        </div>
+      </section>
+    </NSpin>
   </div>
 </template>
 
@@ -161,10 +150,48 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
   font-size: 13px;
 }
 
-.preview {
+/* 区切り線で項目を分けた一覧（Grid カードの置き換え） */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+.info-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.info-row:last-child {
+  border-bottom: none;
+}
+.info-label {
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 14px;
+}
+.info-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.info-value .num {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.info-value .unit {
+  font-size: 14px;
+  color: var(--ink-2);
+  margin-left: 2px;
+}
+.muted {
+  color: var(--ink-3);
+  font-size: 13px;
 }
 
 /* 人件費ヒーロー: 月の一枚看板 */
@@ -198,15 +225,5 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
   font-size: 26px;
   margin-right: 2px;
   color: var(--ink-2);
-}
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.stat-number .unit {
-  font-size: 16px;
-  color: var(--ink-2);
-  margin-left: 3px;
 }
 </style>
