@@ -53,7 +53,7 @@ function doLogout() {
 <template>
   <header class="header">
     <div class="header-inner">
-      <RouterLink to="/dashboard" class="brand">
+      <RouterLink to="/" class="brand">
         <img class="mark-img" :src="logoSrc" alt="" aria-hidden="true" />
         <span class="logo">シフト勤務表</span>
         <span v-if="currentTitle" class="pill">{{ currentTitle }}</span>
