@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { NButton, NCard } from 'naive-ui'
 import { apiBase } from '@/api/client'
@@ -9,7 +9,12 @@ const route = useRoute()
 // OAuth コールバックで許可リスト外だった場合、?error=not_allowed で戻される。
 const notAllowed = computed(() => route.query.error === 'not_allowed')
 
+// backend への遷移はコールドスタート時に数秒かかるため、押下直後に
+// ローディング表示を出して「固まった」ように見えないようにする。
+const loggingIn = ref(false)
+
 function loginWithGoogle() {
+  loggingIn.value = true
   window.location.href = `${apiBase}/api/auth/google/login`
 }
 </script>
@@ -27,11 +32,21 @@ function loginWithGoogle() {
         このアカウントはログインを許可されていません。管理者にお問い合わせください。
       </p>
 
-      <NButton type="primary" size="large" block @click="loginWithGoogle">
-        Google でログイン
+      <NButton
+        type="primary"
+        size="large"
+        block
+        :loading="loggingIn"
+        :disabled="loggingIn"
+        @click="loginWithGoogle"
+      >
+        {{ loggingIn ? 'ログインページへ移動中…' : 'Google でログイン' }}
       </NButton>
 
-      <p class="hint">
+      <p v-if="loggingIn" class="hint">
+        サーバーを起動しています。数秒かかることがあります…
+      </p>
+      <p v-else class="hint">
         管理者が許可したアカウントのみログインできます。
       </p>
     </NCard>
