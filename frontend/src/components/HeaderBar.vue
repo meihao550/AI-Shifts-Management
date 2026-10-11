@@ -14,7 +14,7 @@ const currentTitle = computed(() => (route.meta.title as string) ?? '')
 const nav = computed(() => {
   // 一般ユーザーはダッシュボードとシフト表のみ。それ以外は管理者だけ。
   const items = [
-    { key: 'dashboard', label: 'ダッシュボード', to: '/dashboard' },
+    { key: 'dashboard', label: 'マイページ', to: '/dashboard' },
     { key: 'shift', label: 'シフト表', to: '/shift' },
   ]
   if (auth.isAdmin) {
