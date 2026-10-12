@@ -45,7 +45,6 @@ const pendingApply = ref<{
   kind: AvailabilityKind
   note: string | null
   baseIso: string
-  count: number
 } | null>(null)
 
 // 日付クリックで開くモーダルの状態
@@ -201,24 +200,24 @@ async function remove(id: number) {
 // 配置に関わる種別（曜日一括で置き換える対象）。有給は個別管理なので残す。
 const SCHEDULING_KINDS = new Set<AvailabilityKind>(['unavailable', 'preferred', 'mandatory'])
 
-// 登録直後に、同じ曜日の他の日にも同じ内容を適用するか尋ねる。
-// 当月に他の同じ曜日が無ければ（例: 月末に1回しかない曜日）聞かない。
+// 登録直後に、同じ曜日の「今後の日」にも同じ内容を適用するか尋ねる。
+// 基準日より後の同じ曜日が当月に無ければ（例: 月末）聞かない。
 function promptSameWeekday(baseDate: Date, kind: AvailabilityKind, note: string | null) {
   const weekday = baseDate.getDay()
   const baseIso = isoDate(baseDate)
-  const others = days.value.filter((d) => d.getDay() === weekday && isoDate(d) !== baseIso)
-  if (!others.length) return
-  pendingApply.value = { weekday, kind, note, baseIso, count: others.length }
+  const upcoming = days.value.filter((d) => d.getDay() === weekday && isoDate(d) > baseIso)
+  if (!upcoming.length) return
+  pendingApply.value = { weekday, kind, note, baseIso }
   showApplyPrompt.value = true
 }
 
-// 「はい」。当月の同じ曜日（登録済みの基準日を除く）に同じ内容を適用する。
+// 「はい」。当月の同じ曜日のうち、基準日より後の日に同じ内容を適用する。
 async function confirmApplyWeekday() {
   const p = pendingApply.value
   showApplyPrompt.value = false
   if (!p || !selectedEmployeeId.value) return
   const targets = days.value.filter(
-    (d) => d.getDay() === p.weekday && isoDate(d) !== p.baseIso,
+    (d) => d.getDay() === p.weekday && isoDate(d) > p.baseIso,
   )
   try {
     for (const d of targets) {
@@ -245,7 +244,7 @@ async function confirmApplyWeekday() {
       availabilities.value.push(created)
     }
     message.success(
-      `他の${weekdayNames[p.weekday]}曜日（${targets.length}日）にも「${kindLabels[p.kind]}」を登録しました`,
+      `今後の${weekdayNames[p.weekday]}曜日にも「${kindLabels[p.kind]}」を登録しました`,
     )
   } catch (e) {
     message.error(`一括登録失敗: ${(e as Error).message}`)
@@ -423,7 +422,7 @@ function dayColor(d: Date) {
     <!-- 登録直後の「同じ曜日にも適用しますか？」確認（Googleカレンダー風）。 -->
     <NModal v-model:show="showApplyPrompt" preset="card" title="他の同じ曜日にも適用" style="width: 420px">
       <p v-if="pendingApply" style="margin: 0 0 16px">
-        今月の他の{{ weekdayNames[pendingApply.weekday] }}曜日（{{ pendingApply.count }}日）にも
+        今月の今後の{{ weekdayNames[pendingApply.weekday] }}曜日にも
         「{{ kindLabels[pendingApply.kind] }}」を登録しますか？
       </p>
       <NSpace justify="end">
