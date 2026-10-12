@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { NButton, NCard } from 'naive-ui'
 import { apiBase } from '@/api/client'
@@ -12,6 +12,12 @@ const notAllowed = computed(() => route.query.error === 'not_allowed')
 function loginWithGoogle() {
   window.location.href = `${apiBase}/api/auth/google/login`
 }
+
+// 開発(ローカル)でのみ読み込む補助ツール。本番ビルドでは DEV=false となり、
+// この動的 import ごとツリーシェイクされてバンドルに含まれない。
+const DevLoginTools = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('@/components/DevLoginTools.vue'))
+  : null
 </script>
 
 <template>
@@ -34,6 +40,9 @@ function loginWithGoogle() {
       <p class="hint">
         管理者が許可したアカウントのみログインできます。
       </p>
+
+      <!-- ローカル開発環境でのみ読み込まれる（本番ビルドには含まれない）。 -->
+      <component :is="DevLoginTools" v-if="DevLoginTools" />
     </NCard>
   </div>
 </template>
