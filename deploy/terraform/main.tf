@@ -215,6 +215,10 @@ resource "google_cloud_run_v2_service" "backend" {
           cpu    = "1"
           memory = "1Gi"
         }
+        # true = リクエスト処理中だけ CPU 課金（アイドルは課金しない）。
+        # min=0 のバースト用途ではこれが最安。false(常時割当)だと
+        # 生存中ずっと CPU 課金され無料枠を超えやすい。
+        cpu_idle = true
       }
     }
     scaling {
@@ -250,6 +254,8 @@ resource "google_cloud_run_v2_service" "frontend" {
           cpu    = "1"
           memory = "512Mi"
         }
+        # リクエスト課金に（アイドル中は CPU 課金なし）。詳細は backend 側のコメント参照。
+        cpu_idle = true
       }
     }
     scaling {
