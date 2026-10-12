@@ -423,7 +423,7 @@ function goPrint() {
 
     <!-- 希望入力・AI設定は矢印クリックで開閉（アコーディオン）。管理者のみ。 -->
     <template v-if="auth.isAdmin">
-      <NCollapse class="shift-collapse" :default-expanded-names="[]">
+      <NCollapse class="shift-collapse" :default-expanded-names="[]" arrow-placement="right">
         <NCollapseItem title="休日・希望日カレンダー" name="calendar">
           <AvailabilityCalendar :year="year" :month="month" />
         </NCollapseItem>
@@ -623,8 +623,27 @@ function goPrint() {
 .generate-btn {
   border-radius: 28px;
 }
+/* アコーディオンに区切り線を足して見やすく（idea/accordion.png）。
+   各項目を上下の罫線で仕切り、ヘッダーは少し高め＋ホバーで淡く着色。 */
 .shift-collapse {
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+}
+.shift-collapse :deep(.n-collapse-item) {
+  border-top: 1px solid var(--line-2);
+  margin-top: 0;
+}
+.shift-collapse :deep(.n-collapse-item:last-child) {
+  border-bottom: 1px solid var(--line-2);
+}
+.shift-collapse :deep(.n-collapse-item__header) {
+  padding: 14px 8px !important;
+  font-weight: 600;
+}
+.shift-collapse :deep(.n-collapse-item__header:hover) {
+  background: var(--panel-strip);
+}
+.shift-collapse :deep(.n-collapse-item__content-inner) {
+  padding: 4px 8px 12px;
 }
 
 .table-scroll {
