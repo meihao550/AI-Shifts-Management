@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import {
   NAlert,
   NButton,
+  NCollapse,
+  NCollapseItem,
   NDatePicker,
   NDivider,
   NInput,
@@ -419,40 +421,45 @@ function goPrint() {
       <NButton v-if="shift" type="success" ghost @click="goPrint">印刷プレビュー</NButton>
     </NSpace>
 
-    <!-- 希望入力・シフト生成・セル編集は管理者のみ。従業員は下のシフト表を閲覧するだけ。 -->
+    <!-- 希望入力・AI設定は矢印クリックで開閉（アコーディオン）。管理者のみ。 -->
     <template v-if="auth.isAdmin">
-      <NDivider dashed title-placement="left">休日・希望日カレンダー</NDivider>
-      <AvailabilityCalendar :year="year" :month="month" />
-
-      <NDivider dashed title-placement="left">シフト生成</NDivider>
-      <div class="gen-row">
-        <NSwitch v-model:value="useLLM" />
-        <span class="gen-label">生成AIを使用</span>
-      </div>
-      <template v-if="useLLM">
-        <p class="gen-desc">
-          今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
-          ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
-        </p>
-        <NInput
-          v-model:value="naturalNote"
-          type="textarea"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-          placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
-        />
-      </template>
-      <div class="gen-actions">
-        <NButton
-          type="primary"
-          :loading="shiftStore.generating"
-          @click="generate"
-        >
-          シフトを生成
-        </NButton>
-      </div>
+      <NCollapse class="shift-collapse" :default-expanded-names="[]">
+        <NCollapseItem title="休日・希望日カレンダー" name="calendar">
+          <AvailabilityCalendar :year="year" :month="month" />
+        </NCollapseItem>
+        <NCollapseItem title="生成AIを使用" name="ai">
+          <div class="gen-row">
+            <NSwitch v-model:value="useLLM" />
+            <span class="gen-label">AIを使う</span>
+          </div>
+          <template v-if="useLLM">
+            <p class="gen-desc">
+              今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
+              ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
+            </p>
+            <NInput
+              v-model:value="naturalNote"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 8 }"
+              placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
+            />
+          </template>
+        </NCollapseItem>
+      </NCollapse>
     </template>
 
     <NDivider dashed title-placement="left">{{ auth.isAdmin ? 'シフト表（セルをクリックで編集）' : 'シフト表' }}</NDivider>
+    <!-- シフト生成ボタンはシフト表見出しの直下に配置（管理者のみ）。 -->
+    <div v-if="auth.isAdmin" class="gen-actions">
+      <NButton
+        type="primary"
+        :loading="shiftStore.generating"
+        class="generate-btn"
+        @click="generate"
+      >
+        シフトを生成
+      </NButton>
+    </div>
     <NSpin :show="loading || shiftStore.generating">
         <NAlert
           v-if="genWarnings.length && auth.isAdmin"
@@ -610,6 +617,14 @@ function goPrint() {
 }
 .gen-actions {
   margin-top: 12px;
+  margin-bottom: 12px;
+}
+/* シフト生成ボタンの角丸（要望: 28px） */
+.generate-btn {
+  border-radius: 28px;
+}
+.shift-collapse {
+  margin-bottom: 4px;
 }
 
 .table-scroll {
