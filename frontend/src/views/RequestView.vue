@@ -35,10 +35,6 @@ const unlinked = computed(() => !auth.isAdmin && auth.user?.employee_id == null)
       管理者にログイン管理での紐付けを依頼してください。
     </NAlert>
     <template v-else>
-      <p class="desc">
-        カレンダーの日付をクリックして、休日・希望日・確定出勤・有給を登録できます。
-        ここで提出した希望がシフト作成時に反映されます。
-      </p>
       <AvailabilityCalendar :year="year" :month="month" :employee-id="lockedEmployeeId" />
     </template>
   </div>
@@ -48,11 +44,5 @@ const unlinked = computed(() => !auth.isAdmin && auth.user?.employee_id == null)
 .request-page {
   display: flex;
   flex-direction: column;
-}
-.desc {
-  margin: 0 0 12px;
-  color: var(--ink-3);
-  font-size: 13px;
-  line-height: 1.7;
 }
 </style>

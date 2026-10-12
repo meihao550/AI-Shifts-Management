@@ -36,22 +36,17 @@ const selectedEmployeeId = ref<number | null>(props.employeeId ?? null)
 const availabilities = ref<Availability[]>([])
 const loading = ref(false)
 
-// 曜日で一括登録（毎月流用の手間軽減）。曜日は JS の getDay()（0=日..6=土）。
-const bulkWeekday = ref<number | null>(null)
-const bulkKind = ref<AvailabilityKind | 'clear' | null>(null)
-const bulkStart = ref<number | null>(null)
-const bulkEnd = ref<number | null>(null)
-const bulkPatterns = ref<string[]>([]) // 確定出勤の対象パターンコード（曜日一括用）
-const bulkWeekdayOptions = ['日', '月', '火', '水', '木', '金', '土'].map((l, i) => ({
-  label: `${l}曜日`,
-  value: i,
-}))
-const bulkKindOptions = [
-  { label: '休日', value: 'unavailable' },
-  { label: '希望日(出勤ソフト)', value: 'preferred' },
-  { label: '確定出勤', value: 'mandatory' },
-  { label: '指定なし(解除)', value: 'clear' },
-]
+// Googleカレンダー風：日付に登録した直後、「他の同じ曜日にも適用しますか？」と尋ねる。
+// 曜日は JS の getDay()（0=日..6=土）。
+const weekdayNames = ['日', '月', '火', '水', '木', '金', '土']
+const showApplyPrompt = ref(false)
+const pendingApply = ref<{
+  weekday: number
+  kind: AvailabilityKind
+  note: string | null
+  baseIso: string
+  count: number
+} | null>(null)
 
 // 日付クリックで開くモーダルの状態
 const showModal = ref(false)
@@ -132,8 +127,12 @@ function itemsOn(d: Date): Availability[] {
   return availabilities.value.filter((a) => a.target_date === iso)
 }
 
-async function add(kind: AvailabilityKind, d: Date, note: string | null = null) {
-  if (!selectedEmployeeId.value) return
+async function add(
+  kind: AvailabilityKind,
+  d: Date,
+  note: string | null = null,
+): Promise<Availability | null> {
+  if (!selectedEmployeeId.value) return null
   try {
     const created = await employeeStore.createAvailability({
       employee_id: selectedEmployeeId.value,
@@ -144,8 +143,10 @@ async function add(kind: AvailabilityKind, d: Date, note: string | null = null) 
     })
     availabilities.value.push(created)
     message.success(`${isoDate(d)} を ${kindLabels[kind]} に追加しました`)
+    return created
   } catch (e) {
     message.error(`登録失敗: ${(e as Error).message}`)
+    return null
   }
 }
 
@@ -180,8 +181,12 @@ async function confirmAdd() {
     }
     note = modalPatterns.value.join(',')
   }
-  await add(modalKind.value, modalDate.value, note)
+  const baseDate = modalDate.value
+  const kind = modalKind.value
+  const created = await add(kind, baseDate, note)
   showModal.value = false
+  // 登録に成功したら、同じ曜日の他の日にも適用するか尋ねる（Googleカレンダー風）。
+  if (created) promptSameWeekday(baseDate, kind, note)
 }
 
 async function remove(id: number) {
@@ -196,59 +201,56 @@ async function remove(id: number) {
 // 配置に関わる種別（曜日一括で置き換える対象）。有給は個別管理なので残す。
 const SCHEDULING_KINDS = new Set<AvailabilityKind>(['unavailable', 'preferred', 'mandatory'])
 
-// 選んだ曜日（当月ぶん）を、選んだ種別で一括登録する。既存の配置系は置き換える。
-async function applyBulk() {
-  if (!selectedEmployeeId.value) {
-    message.warning('従業員を選択してください')
-    return
-  }
-  if (bulkWeekday.value == null || !bulkKind.value) {
-    message.warning('曜日と種別を選択してください')
-    return
-  }
-  // 希望日は時間窓、確定出勤は対象シフトパターンが必要。
-  let bulkNote: string | null = null
-  if (bulkKind.value === 'preferred') {
-    if (bulkStart.value == null || bulkEnd.value == null) {
-      message.warning('希望日は開始・終了時刻を選択してください')
-      return
-    }
-    const pad = (h: number) => String(h).padStart(2, '0')
-    bulkNote = `${pad(bulkStart.value)}:00-${pad(bulkEnd.value)}:00`
-  } else if (bulkKind.value === 'mandatory') {
-    if (!bulkPatterns.value.length) {
-      message.warning('確定出勤するシフトパターンを1つ以上選択してください')
-      return
-    }
-    bulkNote = bulkPatterns.value.join(',')
-  }
-  const targets = days.value.filter((d) => d.getDay() === bulkWeekday.value)
+// 登録直後に、同じ曜日の他の日にも同じ内容を適用するか尋ねる。
+// 当月に他の同じ曜日が無ければ（例: 月末に1回しかない曜日）聞かない。
+function promptSameWeekday(baseDate: Date, kind: AvailabilityKind, note: string | null) {
+  const weekday = baseDate.getDay()
+  const baseIso = isoDate(baseDate)
+  const others = days.value.filter((d) => d.getDay() === weekday && isoDate(d) !== baseIso)
+  if (!others.length) return
+  pendingApply.value = { weekday, kind, note, baseIso, count: others.length }
+  showApplyPrompt.value = true
+}
+
+// 「はい」。当月の同じ曜日（登録済みの基準日を除く）に同じ内容を適用する。
+async function confirmApplyWeekday() {
+  const p = pendingApply.value
+  showApplyPrompt.value = false
+  if (!p || !selectedEmployeeId.value) return
+  const targets = days.value.filter(
+    (d) => d.getDay() === p.weekday && isoDate(d) !== p.baseIso,
+  )
   try {
     for (const d of targets) {
       const iso = isoDate(d)
-      // その日の配置系(休日/希望日/確定出勤)を一旦消してから、選んだ種別を付ける。
-      const existing = availabilities.value.filter(
-        (a) => a.target_date === iso && SCHEDULING_KINDS.has(a.kind),
-      )
-      for (const a of existing) {
-        await employeeStore.deleteAvailability(a.id)
-        availabilities.value = availabilities.value.filter((x) => x.id !== a.id)
+      if (SCHEDULING_KINDS.has(p.kind)) {
+        // 配置系(休日/希望日/確定出勤)は1日1つ。既存を置き換えてから登録する。
+        const existing = availabilities.value.filter(
+          (a) => a.target_date === iso && SCHEDULING_KINDS.has(a.kind),
+        )
+        for (const a of existing) {
+          await employeeStore.deleteAvailability(a.id)
+          availabilities.value = availabilities.value.filter((x) => x.id !== a.id)
+        }
+      } else if (availabilities.value.some((a) => a.target_date === iso && a.kind === p.kind)) {
+        continue // 有給など: 既に同じ種別があればスキップ
       }
-      if (bulkKind.value !== 'clear') {
-        const created = await employeeStore.createAvailability({
-          employee_id: selectedEmployeeId.value,
-          target_date: iso,
-          kind: bulkKind.value,
-          shift_type: null,
-          note: bulkNote,
-        })
-        availabilities.value.push(created)
-      }
+      const created = await employeeStore.createAvailability({
+        employee_id: selectedEmployeeId.value,
+        target_date: iso,
+        kind: p.kind,
+        shift_type: null,
+        note: p.note,
+      })
+      availabilities.value.push(created)
     }
-    const label = bulkKindOptions.find((o) => o.value === bulkKind.value)?.label ?? ''
-    message.success(`${bulkWeekdayOptions[bulkWeekday.value].label}を「${label}」で一括登録しました`)
+    message.success(
+      `他の${weekdayNames[p.weekday]}曜日（${targets.length}日）にも「${kindLabels[p.kind]}」を登録しました`,
+    )
   } catch (e) {
     message.error(`一括登録失敗: ${(e as Error).message}`)
+  } finally {
+    pendingApply.value = null
   }
 }
 
@@ -305,37 +307,6 @@ function dayColor(d: Date) {
       <NTag :bordered="false" round type="info">■ 確定出勤</NTag>
       <NTag :bordered="false" round type="warning">■ 有給</NTag>
       <span class="hint">日付をクリックして登録</span>
-    </NSpace>
-
-    <NSpace align="center" style="margin-bottom: 12px">
-      <span class="hint">曜日で一括:</span>
-      <NSelect
-        v-model:value="bulkWeekday"
-        :options="bulkWeekdayOptions"
-        placeholder="曜日"
-        style="width: 110px"
-      />
-      <NSelect
-        v-model:value="bulkKind"
-        :options="bulkKindOptions"
-        placeholder="種別"
-        style="width: 170px"
-      />
-      <template v-if="bulkKind === 'preferred'">
-        <NSelect v-model:value="bulkStart" :options="hourOptions" placeholder="開始" style="width: 90px" />
-        <span>-</span>
-        <NSelect v-model:value="bulkEnd" :options="hourOptions" placeholder="終了" style="width: 90px" />
-      </template>
-      <NSelect
-        v-if="bulkKind === 'mandatory'"
-        v-model:value="bulkPatterns"
-        :options="patternOptions"
-        multiple
-        placeholder="対象シフトを選択"
-        style="width: 260px"
-      />
-      <NButton size="small" :disabled="!selectedEmployeeId" @click="applyBulk">当月へ適用</NButton>
-      <span class="hint">例: 木曜=確定出勤(朝シフト)。毎月この操作で流用できます。</span>
     </NSpace>
 
     <NSpin :show="loading">
@@ -446,6 +417,18 @@ function dayColor(d: Date) {
         </div>
 
         <NButton type="primary" block :disabled="!modalKind" @click="confirmAdd">登録</NButton>
+      </NSpace>
+    </NModal>
+
+    <!-- 登録直後の「同じ曜日にも適用しますか？」確認（Googleカレンダー風）。 -->
+    <NModal v-model:show="showApplyPrompt" preset="card" title="他の同じ曜日にも適用" style="width: 420px">
+      <p v-if="pendingApply" style="margin: 0 0 16px">
+        今月の他の{{ weekdayNames[pendingApply.weekday] }}曜日（{{ pendingApply.count }}日）にも
+        「{{ kindLabels[pendingApply.kind] }}」を登録しますか？
+      </p>
+      <NSpace justify="end">
+        <NButton @click="showApplyPrompt = false">いいえ</NButton>
+        <NButton type="primary" @click="confirmApplyWeekday">はい、適用する</NButton>
       </NSpace>
     </NModal>
   </div>
