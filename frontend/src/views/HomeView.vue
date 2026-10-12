@@ -61,7 +61,7 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
   aspect-ratio: 1 / 1;
   background: var(--panel);
   border: 1px solid var(--line-2);
-  border-radius: 22px;
+  border-radius: 16px;
   box-shadow: var(--shadow-panel);
   transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
