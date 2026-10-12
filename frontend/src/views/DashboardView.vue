@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NAlert, NButton, NSpin, NTag } from 'naive-ui'
+import { NAlert, NButton, NSpin } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
@@ -104,21 +104,13 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
         </div>
 
         <div class="info-row">
-          <span class="info-label">シフト状態</span>
+          <span class="info-label">今月のシフト</span>
           <span class="info-value">
             <template v-if="shift">
-              <NTag :type="shift.status === 'finalized' ? 'success' : 'default'">
-                {{
-                  shift.status === 'finalized'
-                    ? '確定済み'
-                    : shift.status === 'published'
-                      ? '公開中'
-                      : 'ドラフト'
-                }}
-              </NTag>
+              <span>作成済み</span>
               <span class="hint">割当 {{ shift.assignments.length }} 件</span>
             </template>
-            <span v-else class="muted">今月のシフトは未作成</span>
+            <span v-else class="muted">未作成</span>
           </span>
         </div>
 

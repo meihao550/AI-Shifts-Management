@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import {
   NAlert,
   NButton,
-  NCard,
   NDatePicker,
+  NDivider,
   NInput,
   NInputNumber,
   NModal,
@@ -13,7 +13,6 @@ import {
   NSpace,
   NSpin,
   NSwitch,
-  NTag,
   useMessage,
 } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
@@ -407,28 +406,28 @@ function goPrint() {
 </script>
 
 <template>
-  <NSpace vertical>
-    <NCard>
-      <NSpace align="center" wrap>
-        <span>対象月:</span>
-        <NInputNumber v-model:value="year" :min="2024" :max="2100" style="width: 100px" />
-        <NInputNumber v-model:value="month" :min="1" :max="12" style="width: 80px" />
-        <NButton @click="loadShift">読み込み</NButton>
-        <NButton type="primary" ghost @click="openAvailability">
-          希望・不可能日を追加
-        </NButton>
-        <NButton v-if="shift" type="success" ghost @click="goPrint"> 印刷プレビュー </NButton>
-      </NSpace>
-    </NCard>
+  <div class="shift-page">
+    <NSpace align="center" wrap>
+      <span>対象月:</span>
+      <NInputNumber v-model:value="year" :min="2024" :max="2100" style="width: 100px" />
+      <NInputNumber v-model:value="month" :min="1" :max="12" style="width: 80px" />
+      <NButton @click="loadShift">読み込み</NButton>
+      <NButton type="primary" ghost @click="openAvailability">希望・不可能日を追加</NButton>
+      <NButton v-if="shift" type="success" ghost @click="goPrint">印刷プレビュー</NButton>
+    </NSpace>
 
-    <NCard title="休日・希望日カレンダー">
-      <AvailabilityCalendar :year="year" :month="month" />
-    </NCard>
+    <NDivider title-placement="left">休日・希望日カレンダー</NDivider>
+    <AvailabilityCalendar :year="year" :month="month" />
 
-    <NCard title="AIシフト生成">
-      <p style="margin-top: 0; color: #6b7080">
-        今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT
-        がハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
+    <NDivider title-placement="left">シフト生成</NDivider>
+    <div class="gen-row">
+      <NSwitch v-model:value="useLLM" />
+      <span class="gen-label">生成AIを使用</span>
+    </div>
+    <template v-if="useLLM">
+      <p class="gen-desc">
+        今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
+        ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
       </p>
       <NInput
         v-model:value="naturalNote"
@@ -436,30 +435,19 @@ function goPrint() {
         :autosize="{ minRows: 3, maxRows: 8 }"
         placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
       />
-      <NSpace align="center" style="margin-top: 12px">
-        <span>LLM を使用:</span>
-        <NSwitch v-model:value="useLLM" />
-        <NButton type="primary" :loading="shiftStore.generating" @click="generate">
-          シフトを生成
-        </NButton>
-      </NSpace>
-    </NCard>
+    </template>
+    <div class="gen-actions">
+      <NButton
+        type="primary"
+        :loading="shiftStore.generating"
+        @click="generate"
+      >
+        シフトを生成
+      </NButton>
+    </div>
 
-    <NCard title="シフト表（セルをクリックで編集）">
-      <template #header-extra>
-        <NSpace align="center">
-          <NTag v-if="shift" :type="shift.status === 'finalized' ? 'success' : 'default'">
-            {{
-              shift.status === 'finalized'
-                ? '確定済み'
-                : shift.status === 'published'
-                  ? '公開中'
-                  : 'ドラフト'
-            }}
-          </NTag>
-        </NSpace>
-      </template>
-      <NSpin :show="loading || shiftStore.generating">
+    <NDivider title-placement="left">シフト表（セルをクリックで編集）</NDivider>
+    <NSpin :show="loading || shiftStore.generating">
         <NAlert
           v-if="genWarnings.length"
           type="warning"
@@ -537,7 +525,6 @@ function goPrint() {
           </div>
         </template>
       </NSpin>
-    </NCard>
 
     <NModal v-model:show="availDialog" preset="card" title="希望登録" style="width: 480px">
       <NSpace vertical>
@@ -591,10 +578,33 @@ function goPrint() {
         </NSpace>
       </NSpace>
     </NModal>
-  </NSpace>
+  </div>
 </template>
 
 <style scoped>
+/* カードをやめ、セクションは区切り線(NDivider)で分ける。 */
+.shift-page {
+  display: flex;
+  flex-direction: column;
+}
+.gen-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gen-label {
+  font-weight: 600;
+}
+.gen-desc {
+  margin: 10px 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.gen-actions {
+  margin-top: 12px;
+}
+
 .table-scroll {
   overflow-x: auto;
   max-width: 100%;
