@@ -77,9 +77,11 @@ const columnDefs = [
 ]
 const visibleKeys = ref<string[]>(columnDefs.map((c) => c.key))
 const rowColumns = computed<DataTableColumns<PayrollRow>>(() =>
-  allRowColumns.filter(
-    (c) => c.key === 'employee_name' || visibleKeys.value.includes(c.key as string),
-  ),
+  allRowColumns.filter((c) => {
+    if (!('key' in c)) return true
+    const key = String(c.key)
+    return key === 'employee_name' || visibleKeys.value.includes(key)
+  }),
 )
 
 const dayColumns: DataTableColumns<PayrollDay> = [
