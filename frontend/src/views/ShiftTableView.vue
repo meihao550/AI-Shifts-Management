@@ -13,7 +13,6 @@ import {
   NSpace,
   NSpin,
   NSwitch,
-  NTag,
   useMessage,
 } from 'naive-ui'
 import { useShiftStore } from '@/stores/shift'
@@ -446,19 +445,6 @@ function goPrint() {
     </NCard>
 
     <NCard title="シフト表（セルをクリックで編集）">
-      <template #header-extra>
-        <NSpace align="center">
-          <NTag v-if="shift" :type="shift.status === 'finalized' ? 'success' : 'default'">
-            {{
-              shift.status === 'finalized'
-                ? '確定済み'
-                : shift.status === 'published'
-                  ? '公開中'
-                  : 'ドラフト'
-            }}
-          </NTag>
-        </NSpace>
-      </template>
       <NSpin :show="loading || shiftStore.generating">
         <NAlert
           v-if="genWarnings.length"
