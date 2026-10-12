@@ -109,15 +109,18 @@ jobs:
           pip install -e .
           alembic upgrade head
 
-      # --image のみ更新。env/secrets/スケーリング等の既存設定は保持される。
+      # --image を更新。env/secrets/スケーリング等の既存設定は保持される。
+      # --cpu-throttling を明示し、毎回「リクエスト課金」に固定（アイドル中は CPU 課金なし＝無料枠維持）。
       - name: Deploy backend (Cloud Run)
         run: |
           gcloud run deploy ai-shifts-backend \
             --project "$PROJECT_ID" --region "$REGION" \
+            --cpu-throttling \
             --image "$REPO/backend:$GITHUB_SHA"
 
       - name: Deploy frontend (Cloud Run)
         run: |
           gcloud run deploy ai-shifts-frontend \
             --project "$PROJECT_ID" --region "$REGION" \
+            --cpu-throttling \
             --image "$REPO/frontend:$GITHUB_SHA"

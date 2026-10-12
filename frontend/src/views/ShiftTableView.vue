@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import {
   NAlert,
   NButton,
+  NCollapse,
+  NCollapseItem,
   NDatePicker,
   NDivider,
   NInput,
@@ -18,6 +20,7 @@ import {
 import { useShiftStore } from '@/stores/shift'
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
+import { useAuthStore } from '@/stores/auth'
 import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 
@@ -27,6 +30,8 @@ const PAID_LEAVE_VALUE = '__paid_leave__'
 const shiftStore = useShiftStore()
 const employeeStore = useEmployeeStore()
 const ruleStore = useRuleStore()
+// 従業員はシフト表を閲覧するだけ（希望提出は /requests、編集・生成は管理者のみ）。
+const auth = useAuthStore()
 const router = useRouter()
 const message = useMessage()
 
@@ -412,44 +417,52 @@ function goPrint() {
       <NInputNumber v-model:value="year" :min="2024" :max="2100" style="width: 100px" />
       <NInputNumber v-model:value="month" :min="1" :max="12" style="width: 80px" />
       <NButton @click="loadShift">読み込み</NButton>
-      <NButton type="primary" ghost @click="openAvailability">希望・不可能日を追加</NButton>
+      <NButton v-if="auth.isAdmin" type="primary" ghost @click="openAvailability">希望・不可能日を追加</NButton>
       <NButton v-if="shift" type="success" ghost @click="goPrint">印刷プレビュー</NButton>
     </NSpace>
 
-    <NDivider title-placement="left">休日・希望日カレンダー</NDivider>
-    <AvailabilityCalendar :year="year" :month="month" />
-
-    <NDivider title-placement="left">シフト生成</NDivider>
-    <div class="gen-row">
-      <NSwitch v-model:value="useLLM" />
-      <span class="gen-label">生成AIを使用</span>
-    </div>
-    <template v-if="useLLM">
-      <p class="gen-desc">
-        今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
-        ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
-      </p>
-      <NInput
-        v-model:value="naturalNote"
-        type="textarea"
-        :autosize="{ minRows: 3, maxRows: 8 }"
-        placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
-      />
+    <!-- 希望入力・AI設定は矢印クリックで開閉（アコーディオン）。管理者のみ。 -->
+    <template v-if="auth.isAdmin">
+      <NCollapse class="shift-collapse" :default-expanded-names="[]" arrow-placement="right">
+        <NCollapseItem title="休日・希望日カレンダー" name="calendar">
+          <AvailabilityCalendar :year="year" :month="month" />
+        </NCollapseItem>
+        <NCollapseItem title="生成AIを使用" name="ai">
+          <div class="gen-row">
+            <NSwitch v-model:value="useLLM" />
+            <span class="gen-label">AIを使う</span>
+          </div>
+          <template v-if="useLLM">
+            <p class="gen-desc">
+              今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
+              ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
+            </p>
+            <NInput
+              v-model:value="naturalNote"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 8 }"
+              placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
+            />
+          </template>
+        </NCollapseItem>
+      </NCollapse>
     </template>
-    <div class="gen-actions">
+
+    <NDivider dashed title-placement="left">{{ auth.isAdmin ? 'シフト表（セルをクリックで編集）' : 'シフト表' }}</NDivider>
+    <!-- シフト生成ボタンはシフト表見出しの直下に配置（管理者のみ）。 -->
+    <div v-if="auth.isAdmin" class="gen-actions">
       <NButton
         type="primary"
         :loading="shiftStore.generating"
+        class="generate-btn"
         @click="generate"
       >
         シフトを生成
       </NButton>
     </div>
-
-    <NDivider title-placement="left">シフト表（セルをクリックで編集）</NDivider>
     <NSpin :show="loading || shiftStore.generating">
         <NAlert
-          v-if="genWarnings.length"
+          v-if="genWarnings.length && auth.isAdmin"
           type="warning"
           title="シフト生成の注意"
           closable
@@ -465,7 +478,7 @@ function goPrint() {
         </NAlert>
         <template v-else>
           <NAlert
-            v-if="shortfalls.length"
+            v-if="shortfalls.length && auth.isAdmin"
             type="warning"
             title="人数が規定に足りていません"
             style="margin-bottom: 12px"
@@ -497,16 +510,17 @@ function goPrint() {
                   </td>
                   <template v-for="emp in employeeStore.employees" :key="emp.id">
                     <td
-                      class="cell cell-editable"
+                      class="cell"
                       :class="[
                         cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
                         {
+                          'cell-editable': auth.isAdmin,
                           'cell-paid-leave': cellAt(emp.id, d).paidLeave,
                           'is-empty': !cellAt(emp.id, d).label,
                         },
                       ]"
-                      title="クリックで編集"
-                      @click="openCellEdit(emp.id, d)"
+                      :title="auth.isAdmin ? 'クリックで編集' : undefined"
+                      @click="auth.isAdmin && openCellEdit(emp.id, d)"
                     >
                       {{ cellAt(emp.id, d).label }}
                     </td>
@@ -603,6 +617,33 @@ function goPrint() {
 }
 .gen-actions {
   margin-top: 12px;
+  margin-bottom: 12px;
+}
+/* シフト生成ボタンの角丸（要望: 28px） */
+.generate-btn {
+  border-radius: 28px;
+}
+/* アコーディオンに区切り線を足して見やすく（idea/accordion.png）。
+   各項目を上下の罫線で仕切り、ヘッダーは少し高め＋ホバーで淡く着色。 */
+.shift-collapse {
+  margin-bottom: 8px;
+}
+.shift-collapse :deep(.n-collapse-item) {
+  border-top: 1px solid var(--line-2);
+  margin-top: 0;
+}
+.shift-collapse :deep(.n-collapse-item:last-child) {
+  border-bottom: 1px solid var(--line-2);
+}
+.shift-collapse :deep(.n-collapse-item__header) {
+  padding: 14px 8px !important;
+  font-weight: 600;
+}
+.shift-collapse :deep(.n-collapse-item__header:hover) {
+  background: var(--panel-strip);
+}
+.shift-collapse :deep(.n-collapse-item__content-inner) {
+  padding: 4px 8px 12px;
 }
 
 .table-scroll {

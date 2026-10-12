@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NConfigProvider,
   NMessageProvider,
   NNotificationProvider,
   NSpin,
+  darkTheme,
   dateJaJP,
   jaJP,
 } from 'naive-ui'
 import HeaderBar from '@/components/HeaderBar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
 
 const route = useRoute()
 const auth = useAuthStore()
+const themeStore = useThemeStore()
+
+// 保存済みのテーマ(ライト/ダーク)を起動時に適用。
+onMounted(() => themeStore.apply())
 
 const showHeader = computed(() => route.meta.hideHeader !== true && auth.isAuthenticated)
 
@@ -39,48 +45,57 @@ watch(
   { immediate: true },
 )
 
-// naive-ui 全体を Duty Board パレットへ寄せる（表・ボタン・カードが自動追従）
-const themeOverrides = {
-  common: {
-    fontFamily:
-      "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif",
-    primaryColor: '#3b4e8c',
-    primaryColorHover: '#33447c',
-    primaryColorPressed: '#2a3a6a',
-    primaryColorSuppl: '#33447c',
-    infoColor: '#3b4e8c',
-    infoColorHover: '#33447c',
-    successColor: '#3c7a60',
-    warningColor: '#b9791f',
-    errorColor: '#b23a3a',
-    textColorBase: '#191c18',
-    textColor1: '#191c18',
-    textColor2: '#3a3e36',
-    textColor3: '#787c71',
-    bodyColor: '#edefea',
-    cardColor: '#faf9f3',
-    modalColor: '#faf9f3',
-    popoverColor: '#faf9f3',
-    borderColor: '#d6d8ce',
-    borderRadius: '6px',
-    borderRadiusSmall: '4px',
-    fontWeightStrong: '700',
-  },
-  Card: { borderRadius: '10px', color: '#faf9f3' },
-  DataTable: {
-    thColor: '#eef0e8',
-    thTextColor: '#3a3e36',
-    thFontWeight: '700',
-    tdColor: '#faf9f3',
-    borderColor: '#d6d8ce',
-    tdColorHover: '#f0f1ea',
-  },
-  Statistic: { labelFontSize: '13px' },
-}
+// naive-ui は色を JS で計算するため、theme-overrides には実際の色(hex)を渡す。
+// ダーク/ライトで面・文字・罫線の色を切り替える（ブランド色は共通）。
+const themeOverrides = computed(() => {
+  const d = themeStore.isDark
+  return {
+    common: {
+      fontFamily:
+        "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Noto Sans', system-ui, sans-serif",
+      primaryColor: '#3b4e8c',
+      primaryColorHover: '#33447c',
+      primaryColorPressed: '#2a3a6a',
+      primaryColorSuppl: '#33447c',
+      infoColor: '#3b4e8c',
+      infoColorHover: '#33447c',
+      successColor: '#3c7a60',
+      warningColor: '#b9791f',
+      errorColor: '#b23a3a',
+      textColorBase: d ? '#e8eae5' : '#191c18',
+      textColor1: d ? '#e8eae5' : '#191c18',
+      textColor2: d ? '#b4b8b0' : '#3a3e36',
+      textColor3: d ? '#8a8f86' : '#787c71',
+      bodyColor: d ? '#16181a' : '#edefea',
+      cardColor: d ? '#1f2225' : '#faf9f3',
+      modalColor: d ? '#1f2225' : '#faf9f3',
+      popoverColor: d ? '#1f2225' : '#faf9f3',
+      borderColor: d ? '#333a3f' : '#d6d8ce',
+      borderRadius: '6px',
+      borderRadiusSmall: '4px',
+      fontWeightStrong: '700',
+    },
+    Card: { borderRadius: '10px', color: d ? '#1f2225' : '#faf9f3' },
+    DataTable: {
+      thColor: d ? '#272b2f' : '#eef0e8',
+      thTextColor: d ? '#b4b8b0' : '#3a3e36',
+      thFontWeight: '700',
+      tdColor: d ? '#1f2225' : '#faf9f3',
+      borderColor: d ? '#333a3f' : '#d6d8ce',
+      tdColorHover: d ? '#272b2f' : '#f0f1ea',
+    },
+    Statistic: { labelFontSize: '13px' },
+  }
+})
 </script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides" :locale="jaJP" :date-locale="dateJaJP">
+  <n-config-provider
+    :theme="themeStore.isDark ? darkTheme : undefined"
+    :theme-overrides="themeOverrides"
+    :locale="jaJP"
+    :date-locale="dateJaJP"
+  >
     <n-message-provider>
       <n-notification-provider>
         <div class="app-shell">

@@ -141,9 +141,6 @@ async function remove(id: number) {
     <template #header-extra>
       <NButton type="primary" @click="openAdd">＋ ログインを許可する人を追加</NButton>
     </template>
-    <p style="color: var(--ink-3); font-size: 13px; margin-top: 0">
-      ここに登録されたメールアドレスの Google アカウントだけがログインできます。権限は次回ログイン時に反映されます。
-    </p>
     <NDataTable
       :columns="columns"
       :data="store.items"

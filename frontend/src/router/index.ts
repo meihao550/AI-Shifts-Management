@@ -19,6 +19,12 @@ const routes: RouteRecordRaw[] = [
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
     meta: { title: 'ホーム' },
+    // PC(>768px)では自動的にマイページへ。スマホはホーム(ランチャー)を表示。
+    beforeEnter: () => {
+      if (window.matchMedia('(min-width: 769px)').matches) {
+        return { name: 'my-page' }
+      }
+    },
   },
   {
     path: '/mypage',
@@ -31,6 +37,12 @@ const routes: RouteRecordRaw[] = [
     name: 'shift-table',
     component: () => import('@/views/ShiftTableView.vue'),
     meta: { title: 'シフト表' },
+  },
+  {
+    path: '/requests',
+    name: 'requests',
+    component: () => import('@/views/RequestView.vue'),
+    meta: { title: '希望提出' },
   },
   {
     path: '/employees',

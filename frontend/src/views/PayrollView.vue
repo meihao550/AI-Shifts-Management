@@ -113,7 +113,6 @@ const dayColumns: DataTableColumns<PayrollDay> = [
     </NAlert>
 
     <section v-if="payroll" class="cost-hero">
-      <div class="cost-hero__band" aria-hidden="true"></div>
       <div>
         <p class="eyebrow">{{ year }}年{{ month }}月 の人件費合計</p>
         <p class="cost-hero__value">
@@ -158,12 +157,6 @@ const dayColumns: DataTableColumns<PayrollDay> = [
   border-radius: var(--r-panel);
   padding: 20px 24px;
   box-shadow: var(--shadow-panel);
-}
-.cost-hero__band {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 6px;
-  background: linear-gradient(180deg, var(--morning), var(--evening), var(--night));
 }
 .cost-hero .eyebrow {
   margin: 0 0 4px;

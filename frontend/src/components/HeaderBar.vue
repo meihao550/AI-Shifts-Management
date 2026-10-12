@@ -3,10 +3,21 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDrawer, NDrawerContent, NDropdown, NModal, NSpace } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
+// ナビのアイコン（idea/icon のラインアート）。白背景を透明化したマスク画像で、
+// CSS の mask-image + background-color: currentColor により文字色で塗る（ライト/ダーク両対応）。
+import myPageIcon from '@/assets/nav/my-page.png'
+import shiftIcon from '@/assets/nav/shift.png'
+import requestsIcon from '@/assets/nav/requests.png'
+import payrollIcon from '@/assets/nav/payroll.png'
+import employeesIcon from '@/assets/nav/employees.png'
+import rulesIcon from '@/assets/nav/rules.png'
+import loginUsersIcon from '@/assets/nav/login-users.png'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const themeStore = useThemeStore()
 
 const currentTitle = computed(() => (route.meta.title as string) ?? '')
 
@@ -19,14 +30,20 @@ interface NavItem {
   adminOnly?: boolean
 }
 const allNav: NavItem[] = [
-  { key: 'home', label: 'ホーム', to: '/', icon: '🏠' },
-  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '👤' },
-  { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
-  { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
-  { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },
-  { key: 'rules', label: 'ルール設定', to: '/rules', icon: '⚙️', adminOnly: true },
-  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: '🔑', adminOnly: true },
+  // ホームは PC では自動的にマイページへ飛ぶため、メニューには出さない（ドロワーは PC 専用）。
+  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: myPageIcon },
+  { key: 'shift', label: 'シフト表', to: '/shift', icon: shiftIcon },
+  { key: 'requests', label: '希望提出', to: '/requests', icon: requestsIcon },
+  { key: 'payroll', label: '人件費', to: '/payroll', icon: payrollIcon, adminOnly: true },
+  { key: 'employees', label: '従業員管理', to: '/employees', icon: employeesIcon, adminOnly: true },
+  { key: 'rules', label: 'ルール設定', to: '/rules', icon: rulesIcon, adminOnly: true },
+  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: loginUsersIcon, adminOnly: true },
 ]
+
+// マスク画像を CSS 変数で渡す（.nav-ic が currentColor で塗る）。
+function iconStyle(url: string) {
+  return { '--nav-ic': `url(${url})` }
+}
 // 一般ユーザーには管理者専用を出さない。
 const nav = computed(() => allNav.filter((i) => !i.adminOnly || auth.isAdmin))
 
@@ -126,9 +143,26 @@ function doLogout() {
           href="#"
           @click.prevent="go(item.to)"
         >
-          <span class="menu-icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="menu-icon nav-ic" aria-hidden="true" :style="iconStyle(item.icon)"></span>
           <span class="menu-label">{{ item.label }}</span>
         </a>
+
+        <!-- 星マークで画面を暗転/復帰（ダーク/ライト切替）。ドロワーは閉じずその場で反映。 -->
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item theme-toggle" @click="themeStore.toggle()">
+          <span class="menu-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24">
+              <path
+                d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+                :fill="themeStore.isDark ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+          <span class="menu-label">{{ themeStore.isDark ? '画面を明るくする' : '画面を暗くする' }}</span>
+        </button>
       </nav>
     </NDrawerContent>
   </NDrawer>
@@ -146,12 +180,8 @@ function doLogout() {
 .header {
   background: var(--panel);
   color: var(--ink);
-  /* 時間帯(朝→夕→深夜)の細い帯を1本だけ下端に。この題材の署名的ディテール。 */
-  border-bottom: 2px solid transparent;
-  border-image: linear-gradient(90deg,
-      var(--morning) 0%,
-      var(--evening) 50%,
-      var(--night) 100%) 1;
+  /* 下端は黒いライン1本。 */
+  border-bottom: 2px solid var(--ink);
   box-shadow: 0 1px 3px rgba(25, 28, 24, 0.06);
 }
 
@@ -294,8 +324,39 @@ function doLogout() {
   width: 24px;
   text-align: center;
 }
+/* マスク画像を currentColor で塗るアイコン（ライト/ダーク両対応）。 */
+.nav-ic {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--nav-ic);
+  mask-image: var(--nav-ic);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
 .menu-label {
   font-size: 15px;
+}
+
+/* ドロワー下部の区切り線＋星トグル（画面の暗転）。 */
+.menu-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 8px 4px;
+}
+.theme-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
 }
 
 /* モバイル(狭幅): ハンバーガーは出さず、ナビはホーム(ランチャー)で代替。 */
