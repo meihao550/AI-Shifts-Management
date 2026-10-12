@@ -4,8 +4,11 @@ import {
   NAlert,
   NButton,
   NCard,
+  NCheckbox,
+  NCheckboxGroup,
   NDataTable,
   NInputNumber,
+  NPopover,
   NSpace,
   NTag,
 } from 'naive-ui'
@@ -26,7 +29,7 @@ onMounted(load)
 
 const payroll = computed(() => store.payroll)
 
-const rowColumns: DataTableColumns<PayrollRow> = [
+const allRowColumns: DataTableColumns<PayrollRow> = [
   { title: '従業員', key: 'employee_name' },
   { title: '拘束時間', key: 'total_hours', render: (r) => `${r.total_hours} h` },
   { title: '実働時間', key: 'worked_hours', render: (r) => `${r.worked_hours} h` },
@@ -59,6 +62,25 @@ const rowColumns: DataTableColumns<PayrollRow> = [
   },
   { title: '合計', key: 'grand_total', render: (r) => `¥${r.grand_total.toLocaleString()}` },
 ]
+
+// 表示する列をオンオフできるようにする（従業員列は識別のため常に表示）。
+const columnDefs = [
+  { key: 'total_hours', title: '拘束時間' },
+  { key: 'worked_hours', title: '実働時間' },
+  { key: 'overnight_hours', title: '深夜時間' },
+  { key: 'base_wage', title: '基本賃金' },
+  { key: 'overnight_premium', title: '深夜割増' },
+  { key: 'transport_cost_total', title: '交通費' },
+  { key: 'paid_leave_total', title: '有給' },
+  { key: 'insurance_status', title: '保険' },
+  { key: 'grand_total', title: '合計' },
+]
+const visibleKeys = ref<string[]>(columnDefs.map((c) => c.key))
+const rowColumns = computed<DataTableColumns<PayrollRow>>(() =>
+  allRowColumns.filter(
+    (c) => c.key === 'employee_name' || visibleKeys.value.includes(c.key as string),
+  ),
+)
 
 const dayColumns: DataTableColumns<PayrollDay> = [
   { title: '日付', key: 'target_date' },
@@ -100,6 +122,18 @@ const dayColumns: DataTableColumns<PayrollDay> = [
     </section>
 
     <NCard v-if="payroll" title="従業員別">
+      <template #header-extra>
+        <NPopover trigger="click" placement="bottom-end">
+          <template #trigger>
+            <NButton size="small" secondary>表示する項目</NButton>
+          </template>
+          <NCheckboxGroup v-model:value="visibleKeys">
+            <NSpace vertical size="small">
+              <NCheckbox v-for="c in columnDefs" :key="c.key" :value="c.key" :label="c.title" />
+            </NSpace>
+          </NCheckboxGroup>
+        </NPopover>
+      </template>
       <NDataTable :columns="rowColumns" :data="payroll.rows" :bordered="false" />
     </NCard>
 
