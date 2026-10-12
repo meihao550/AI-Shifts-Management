@@ -4,6 +4,15 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDrawer, NDrawerContent, NDropdown, NModal, NSpace } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+// ナビのアイコン（idea/icon のラインアート）。白背景を透明化したマスク画像で、
+// CSS の mask-image + background-color: currentColor により文字色で塗る（ライト/ダーク両対応）。
+import myPageIcon from '@/assets/nav/my-page.png'
+import shiftIcon from '@/assets/nav/shift.png'
+import requestsIcon from '@/assets/nav/requests.png'
+import payrollIcon from '@/assets/nav/payroll.png'
+import employeesIcon from '@/assets/nav/employees.png'
+import rulesIcon from '@/assets/nav/rules.png'
+import loginUsersIcon from '@/assets/nav/login-users.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,14 +31,19 @@ interface NavItem {
 }
 const allNav: NavItem[] = [
   // ホームは PC では自動的にマイページへ飛ぶため、メニューには出さない（ドロワーは PC 専用）。
-  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '👤' },
-  { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
-  { key: 'requests', label: '希望提出', to: '/requests', icon: '📝' },
-  { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
-  { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },
-  { key: 'rules', label: 'ルール設定', to: '/rules', icon: '⚙️', adminOnly: true },
-  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: '🔑', adminOnly: true },
+  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: myPageIcon },
+  { key: 'shift', label: 'シフト表', to: '/shift', icon: shiftIcon },
+  { key: 'requests', label: '希望提出', to: '/requests', icon: requestsIcon },
+  { key: 'payroll', label: '人件費', to: '/payroll', icon: payrollIcon, adminOnly: true },
+  { key: 'employees', label: '従業員管理', to: '/employees', icon: employeesIcon, adminOnly: true },
+  { key: 'rules', label: 'ルール設定', to: '/rules', icon: rulesIcon, adminOnly: true },
+  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: loginUsersIcon, adminOnly: true },
 ]
+
+// マスク画像を CSS 変数で渡す（.nav-ic が currentColor で塗る）。
+function iconStyle(url: string) {
+  return { '--nav-ic': `url(${url})` }
+}
 // 一般ユーザーには管理者専用を出さない。
 const nav = computed(() => allNav.filter((i) => !i.adminOnly || auth.isAdmin))
 
@@ -129,7 +143,7 @@ function doLogout() {
           href="#"
           @click.prevent="go(item.to)"
         >
-          <span class="menu-icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="menu-icon nav-ic" aria-hidden="true" :style="iconStyle(item.icon)"></span>
           <span class="menu-label">{{ item.label }}</span>
         </a>
 
@@ -309,6 +323,21 @@ function doLogout() {
   line-height: 1;
   width: 24px;
   text-align: center;
+}
+/* マスク画像を currentColor で塗るアイコン（ライト/ダーク両対応）。 */
+.nav-ic {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--nav-ic);
+  mask-image: var(--nav-ic);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 .menu-label {
   font-size: 15px;
