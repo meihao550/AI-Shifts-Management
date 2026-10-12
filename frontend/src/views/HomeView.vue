@@ -43,7 +43,7 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px 16px;
-  max-width: 500px;
+  max-width: 400px;
   margin: 8px auto 0;
 }
 
