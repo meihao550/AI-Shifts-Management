@@ -19,6 +19,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { useEmployeeStore } from '@/stores/employee'
+import { useIsMobile } from '@/composables/useIsMobile'
 import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
@@ -108,7 +109,7 @@ const insuranceLabels: Record<string, string> = {
   none: 'なし',
 }
 
-const columns: DataTableColumns<Employee> = [
+const desktopColumns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
   { title: '有給', key: 'paid_leave_amount', render: (r)=> `¥${r.paid_leave_amount}`},
@@ -181,6 +182,66 @@ const columns: DataTableColumns<Employee> = [
   },
 ]
 
+// スマホ幅では列を ID・名前・詳細(展開)に絞り、残りの項目と操作は展開行で見せる。
+const isMobile = useIsMobile()
+const rowKey = (row: Employee) => row.id
+
+function detailRow(label: string, value: unknown) {
+  return h(
+    'div',
+    {
+      style:
+        'display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)',
+    },
+    [
+      h('span', { style: 'color:var(--ink-2);font-size:13px' }, label),
+      h('span', { style: 'font-weight:600;text-align:right' }, String(value)),
+    ],
+  )
+}
+
+function renderEmployeeDetail(row: Employee) {
+  return h('div', { style: 'padding:8px 4px 4px' }, [
+    detailRow('有給', `¥${row.paid_leave_amount}`),
+    detailRow('年齢', row.age ?? '—'),
+    detailRow('時給', `¥${row.hourly_wage}`),
+    detailRow('交通費/日', `¥${row.transport_cost}`),
+    detailRow('Wワーク', row.is_dual_worker ? '○' : '—'),
+    detailRow('週回数', row.weekly_shifts),
+    detailRow('週回数固定', row.weekly_shifts_pinned ? '○' : '—'),
+    detailRow('保険', insuranceLabels[row.insurance_type] ?? row.insurance_type),
+    detailRow('普段の時間', windowLabel(row)),
+    detailRow('ロール', row.role === 'admin' ? '管理者' : '一般'),
+    detailRow('在籍', row.active ? '○' : '×'),
+    h('div', { style: 'display:flex;gap:8px;margin-top:12px;flex-wrap:wrap' }, [
+      h(NButton, { size: 'small', onClick: () => openEdit(row) }, () => '編集'),
+      h(
+        NButton,
+        { size: 'small', onClick: () => router.push(`/employees/${row.id}/calendar`) },
+        () => 'カレンダー',
+      ),
+      h(
+        NPopconfirm,
+        { onPositiveClick: () => remove(row.id) },
+        {
+          default: () => '削除しますか？',
+          trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
+        },
+      ),
+    ]),
+  ])
+}
+
+const mobileColumns: DataTableColumns<Employee> = [
+  { title: 'ID', key: 'id', width: 60 },
+  { title: '名前', key: 'name' },
+  { type: 'expand', title: '詳細', renderExpand: renderEmployeeDetail },
+]
+
+const columns = computed<DataTableColumns<Employee>>(() =>
+  isMobile.value ? mobileColumns : desktopColumns,
+)
+
 // 新規従業員登録の際の初期値
 function openCreate() {
   form.value = {
@@ -238,7 +299,13 @@ async function remove(id: number) {
     <template #header-extra>
       <NButton type="primary" @click="openCreate">＋ 新規従業員</NButton>
     </template>
-    <NDataTable :columns="columns" :data="store.employees" :loading="store.loading" :bordered="false" />
+    <NDataTable
+      :columns="columns"
+      :data="store.employees"
+      :loading="store.loading"
+      :row-key="rowKey"
+      :bordered="false"
+    />
 
     <NModal
       v-model:show="showEdit"

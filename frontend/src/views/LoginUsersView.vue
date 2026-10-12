@@ -16,6 +16,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { useAllowedLoginStore } from '@/stores/allowedLogin'
 import { useEmployeeStore } from '@/stores/employee'
+import { useIsMobile } from '@/composables/useIsMobile'
 import type { AllowedLogin, UserRole } from '@/types'
 
 const store = useAllowedLoginStore()
@@ -48,33 +49,68 @@ onMounted(() => {
   employeeStore.fetchAll()
 })
 
-const columns: DataTableColumns<AllowedLogin> = [
+function loginEmployeeLabel(r: AllowedLogin): string {
+  return r.employee_id != null
+    ? (employeeNameById.value.get(r.employee_id) ?? `#${r.employee_id}`)
+    : '—'
+}
+
+function renderDeleteButton(row: AllowedLogin) {
+  return h(
+    NPopconfirm,
+    { onPositiveClick: () => remove(row.id) },
+    {
+      default: () => `${row.email} を削除しますか？`,
+      trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
+    },
+  )
+}
+
+const desktopColumns: DataTableColumns<AllowedLogin> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '氏名', key: 'name' },
   { title: 'メールアドレス', key: 'email' },
   { title: '権限', key: 'role', width: 100, render: (r) => roleLabels[r.role] ?? r.role },
-  {
-    title: '従業員',
-    key: 'employee_id',
-    render: (r) =>
-      r.employee_id != null ? (employeeNameById.value.get(r.employee_id) ?? `#${r.employee_id}`) : '—',
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 100,
-    render: (row) =>
-      h(
-        NPopconfirm,
-        { onPositiveClick: () => remove(row.id) },
-        {
-          default: () => `${row.email} を削除しますか？`,
-          trigger: () =>
-            h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
-        },
-      ),
-  },
+  { title: '従業員', key: 'employee_id', render: (r) => loginEmployeeLabel(r) },
+  { title: '操作', key: 'actions', width: 100, render: (row) => renderDeleteButton(row) },
 ]
+
+// スマホ幅では列を ID・氏名・詳細(展開)に絞り、残りと操作は展開行で見せる。
+const isMobile = useIsMobile()
+const rowKey = (row: AllowedLogin) => row.id
+
+function detailRow(label: string, value: unknown) {
+  return h(
+    'div',
+    {
+      style:
+        'display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)',
+    },
+    [
+      h('span', { style: 'color:var(--ink-2);font-size:13px' }, label),
+      h('span', { style: 'font-weight:600;text-align:right;word-break:break-all' }, String(value)),
+    ],
+  )
+}
+
+function renderLoginDetail(row: AllowedLogin) {
+  return h('div', { style: 'padding:8px 4px 4px' }, [
+    detailRow('メールアドレス', row.email),
+    detailRow('権限', roleLabels[row.role] ?? row.role),
+    detailRow('従業員', loginEmployeeLabel(row)),
+    h('div', { style: 'margin-top:12px' }, [renderDeleteButton(row)]),
+  ])
+}
+
+const mobileColumns: DataTableColumns<AllowedLogin> = [
+  { title: 'ID', key: 'id', width: 60 },
+  { title: '氏名', key: 'name' },
+  { type: 'expand', title: '詳細', renderExpand: renderLoginDetail },
+]
+
+const columns = computed<DataTableColumns<AllowedLogin>>(() =>
+  isMobile.value ? mobileColumns : desktopColumns,
+)
 
 function openAdd() {
   form.value = { name: '', email: '', role: 'employee', employeeId: null }
@@ -127,6 +163,7 @@ async function remove(id: number) {
       :columns="columns"
       :data="store.items"
       :loading="store.loading"
+      :row-key="rowKey"
       :bordered="false"
     />
 
