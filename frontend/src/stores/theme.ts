@@ -22,5 +22,9 @@ export const useThemeStore = defineStore('theme', {
       localStorage.setItem(KEY, mode)
       this.apply()
     },
+    // 星マークから呼ぶ: ライトとダークを反転（画面を暗転/復帰）。
+    toggle() {
+      this.setMode(this.mode === 'dark' ? 'light' : 'dark')
+    },
   },
 })

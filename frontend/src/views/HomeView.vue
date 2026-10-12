@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
 
 const auth = useAuthStore()
+const themeStore = useThemeStore()
 
 interface Tile {
   key: string
@@ -19,7 +21,6 @@ const allTiles: Tile[] = [
   { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '🏠' },
   { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
   { key: 'requests', label: '希望提出', to: '/requests', icon: '📝' },
-  { key: 'settings', label: '設定', to: '/settings', icon: '🖥️' },
   { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
   { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },
   { key: 'rules', label: 'ルール設定', to: '/rules', icon: '⚙️', adminOnly: true },
@@ -36,6 +37,24 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
       <span class="tile__box"><span class="tile__icon">{{ t.icon }}</span></span>
       <span class="tile__label">{{ t.label }}</span>
     </RouterLink>
+
+    <!-- 星マークで画面を暗転/復帰（ダーク/ライト切替）。遷移せずその場で反映。 -->
+    <button type="button" class="tile tile--button" @click="themeStore.toggle()">
+      <span class="tile__box">
+        <span class="tile__icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+              :fill="themeStore.isDark ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+      </span>
+      <span class="tile__label">{{ themeStore.isDark ? '明るくする' : '暗くする' }}</span>
+    </button>
   </div>
 </template>
 
@@ -56,6 +75,14 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
   gap: 8px;
   text-decoration: none;
   color: var(--ink);
+}
+/* 星トグルはボタン要素なので既定装飾をリセットしてタイルと揃える。 */
+.tile--button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
 }
 
 .tile__box {
