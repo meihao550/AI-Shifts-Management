@@ -18,6 +18,7 @@ import {
 import { useShiftStore } from '@/stores/shift'
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
+import { useAuthStore } from '@/stores/auth'
 import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 
@@ -27,6 +28,8 @@ const PAID_LEAVE_VALUE = '__paid_leave__'
 const shiftStore = useShiftStore()
 const employeeStore = useEmployeeStore()
 const ruleStore = useRuleStore()
+// 従業員はシフト表を閲覧するだけ（希望提出は /requests、編集・生成は管理者のみ）。
+const auth = useAuthStore()
 const router = useRouter()
 const message = useMessage()
 
@@ -412,44 +415,47 @@ function goPrint() {
       <NInputNumber v-model:value="year" :min="2024" :max="2100" style="width: 100px" />
       <NInputNumber v-model:value="month" :min="1" :max="12" style="width: 80px" />
       <NButton @click="loadShift">読み込み</NButton>
-      <NButton type="primary" ghost @click="openAvailability">希望・不可能日を追加</NButton>
+      <NButton v-if="auth.isAdmin" type="primary" ghost @click="openAvailability">希望・不可能日を追加</NButton>
       <NButton v-if="shift" type="success" ghost @click="goPrint">印刷プレビュー</NButton>
     </NSpace>
 
-    <NDivider dashed title-placement="left">休日・希望日カレンダー</NDivider>
-    <AvailabilityCalendar :year="year" :month="month" />
+    <!-- 希望入力・シフト生成・セル編集は管理者のみ。従業員は下のシフト表を閲覧するだけ。 -->
+    <template v-if="auth.isAdmin">
+      <NDivider dashed title-placement="left">休日・希望日カレンダー</NDivider>
+      <AvailabilityCalendar :year="year" :month="month" />
 
-    <NDivider dashed title-placement="left">シフト生成</NDivider>
-    <div class="gen-row">
-      <NSwitch v-model:value="useLLM" />
-      <span class="gen-label">生成AIを使用</span>
-    </div>
-    <template v-if="useLLM">
-      <p class="gen-desc">
-        今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
-        ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
-      </p>
-      <NInput
-        v-model:value="naturalNote"
-        type="textarea"
-        :autosize="{ minRows: 3, maxRows: 8 }"
-        placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
-      />
+      <NDivider dashed title-placement="left">シフト生成</NDivider>
+      <div class="gen-row">
+        <NSwitch v-model:value="useLLM" />
+        <span class="gen-label">生成AIを使用</span>
+      </div>
+      <template v-if="useLLM">
+        <p class="gen-desc">
+          今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
+          ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
+        </p>
+        <NInput
+          v-model:value="naturalNote"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 8 }"
+          placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
+        />
+      </template>
+      <div class="gen-actions">
+        <NButton
+          type="primary"
+          :loading="shiftStore.generating"
+          @click="generate"
+        >
+          シフトを生成
+        </NButton>
+      </div>
     </template>
-    <div class="gen-actions">
-      <NButton
-        type="primary"
-        :loading="shiftStore.generating"
-        @click="generate"
-      >
-        シフトを生成
-      </NButton>
-    </div>
 
-    <NDivider dashed title-placement="left">シフト表（セルをクリックで編集）</NDivider>
+    <NDivider dashed title-placement="left">{{ auth.isAdmin ? 'シフト表（セルをクリックで編集）' : 'シフト表' }}</NDivider>
     <NSpin :show="loading || shiftStore.generating">
         <NAlert
-          v-if="genWarnings.length"
+          v-if="genWarnings.length && auth.isAdmin"
           type="warning"
           title="シフト生成の注意"
           closable
@@ -465,7 +471,7 @@ function goPrint() {
         </NAlert>
         <template v-else>
           <NAlert
-            v-if="shortfalls.length"
+            v-if="shortfalls.length && auth.isAdmin"
             type="warning"
             title="人数が規定に足りていません"
             style="margin-bottom: 12px"
@@ -497,16 +503,17 @@ function goPrint() {
                   </td>
                   <template v-for="emp in employeeStore.employees" :key="emp.id">
                     <td
-                      class="cell cell-editable"
+                      class="cell"
                       :class="[
                         cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
                         {
+                          'cell-editable': auth.isAdmin,
                           'cell-paid-leave': cellAt(emp.id, d).paidLeave,
                           'is-empty': !cellAt(emp.id, d).label,
                         },
                       ]"
-                      title="クリックで編集"
-                      @click="openCellEdit(emp.id, d)"
+                      :title="auth.isAdmin ? 'クリックで編集' : undefined"
+                      @click="auth.isAdmin && openCellEdit(emp.id, d)"
                     >
                       {{ cellAt(emp.id, d).label }}
                     </td>
