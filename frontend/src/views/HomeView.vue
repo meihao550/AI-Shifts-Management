@@ -18,6 +18,7 @@ interface Tile {
 const allTiles: Tile[] = [
   { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '🏠' },
   { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
+  { key: 'requests', label: '希望提出', to: '/requests', icon: '📝' },
   { key: 'settings', label: '設定', to: '/settings', icon: '🖥️' },
   { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
   { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },

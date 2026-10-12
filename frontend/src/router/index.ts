@@ -39,6 +39,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'シフト表' },
   },
   {
+    path: '/requests',
+    name: 'requests',
+    component: () => import('@/views/RequestView.vue'),
+    meta: { title: '希望提出' },
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),
