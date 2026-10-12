@@ -22,6 +22,7 @@ const allNav: NavItem[] = [
   // ホームは PC では自動的にマイページへ飛ぶため、メニューには出さない（ドロワーは PC 専用）。
   { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '👤' },
   { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
+  { key: 'settings', label: '設定', to: '/settings', icon: '🖥️' },
   { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
   { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },
   { key: 'rules', label: 'ルール設定', to: '/rules', icon: '⚙️', adminOnly: true },
@@ -146,12 +147,8 @@ function doLogout() {
 .header {
   background: var(--panel);
   color: var(--ink);
-  /* 時間帯(朝→夕→深夜)の細い帯を1本だけ下端に。この題材の署名的ディテール。 */
-  border-bottom: 2px solid transparent;
-  border-image: linear-gradient(90deg,
-      var(--morning) 0%,
-      var(--evening) 50%,
-      var(--night) 100%) 1;
+  /* 下端は黒いライン1本。 */
+  border-bottom: 2px solid var(--ink);
   box-shadow: 0 1px 3px rgba(25, 28, 24, 0.06);
 }
 

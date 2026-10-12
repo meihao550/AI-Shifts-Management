@@ -48,6 +48,25 @@
   --page-max-width: 1440px;
 }
 
+/* ダークテーマ（設定画面で切替。html.dark で有効化）。面・文字・罫線を暗転させる。 */
+html.dark {
+  --paper: #16181a;
+  --panel: #1f2225;
+  --panel-strip: #272b2f;
+  --ink: #e8eae5;
+  --ink-2: #b4b8b0;
+  --ink-3: #8a8f86;
+  --line: #333a3f;
+  --line-2: #434b51;
+  --grid: rgba(255, 255, 255, 0.04);
+  --indigo-050: #2a3347;
+  --indigo-700: #aab8e0;
+  --danger-bg: #3a2422;
+  --warn-bg: #3a3122;
+  --ok-bg: #203a30;
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
 * {
   box-sizing: border-box;
 }

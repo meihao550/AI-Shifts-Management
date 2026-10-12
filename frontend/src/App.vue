@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NConfigProvider,
   NMessageProvider,
   NNotificationProvider,
   NSpin,
+  darkTheme,
   dateJaJP,
   jaJP,
 } from 'naive-ui'
 import HeaderBar from '@/components/HeaderBar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
 
 const route = useRoute()
 const auth = useAuthStore()
+const themeStore = useThemeStore()
+
+// 保存済みのテーマ(ライト/ダーク)を起動時に適用。
+onMounted(() => themeStore.apply())
 
 const showHeader = computed(() => route.meta.hideHeader !== true && auth.isAuthenticated)
 
@@ -53,34 +59,39 @@ const themeOverrides = {
     successColor: '#3c7a60',
     warningColor: '#b9791f',
     errorColor: '#b23a3a',
-    textColorBase: '#191c18',
-    textColor1: '#191c18',
-    textColor2: '#3a3e36',
-    textColor3: '#787c71',
-    bodyColor: '#edefea',
-    cardColor: '#faf9f3',
-    modalColor: '#faf9f3',
-    popoverColor: '#faf9f3',
-    borderColor: '#d6d8ce',
+    textColorBase: 'var(--ink)',
+    textColor1: 'var(--ink)',
+    textColor2: 'var(--ink-2)',
+    textColor3: 'var(--ink-3)',
+    bodyColor: 'var(--paper)',
+    cardColor: 'var(--panel)',
+    modalColor: 'var(--panel)',
+    popoverColor: 'var(--panel)',
+    borderColor: 'var(--line)',
     borderRadius: '6px',
     borderRadiusSmall: '4px',
     fontWeightStrong: '700',
   },
-  Card: { borderRadius: '10px', color: '#faf9f3' },
+  Card: { borderRadius: '10px', color: 'var(--panel)' },
   DataTable: {
-    thColor: '#eef0e8',
-    thTextColor: '#3a3e36',
+    thColor: 'var(--panel-strip)',
+    thTextColor: 'var(--ink-2)',
     thFontWeight: '700',
-    tdColor: '#faf9f3',
-    borderColor: '#d6d8ce',
-    tdColorHover: '#f0f1ea',
+    tdColor: 'var(--panel)',
+    borderColor: 'var(--line)',
+    tdColorHover: 'var(--panel-strip)',
   },
   Statistic: { labelFontSize: '13px' },
 }
 </script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides" :locale="jaJP" :date-locale="dateJaJP">
+  <n-config-provider
+    :theme="themeStore.isDark ? darkTheme : undefined"
+    :theme-overrides="themeOverrides"
+    :locale="jaJP"
+    :date-locale="dateJaJP"
+  >
     <n-message-provider>
       <n-notification-provider>
         <div class="app-shell">
