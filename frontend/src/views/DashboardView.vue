@@ -67,7 +67,6 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
 
     <!-- 管理者: 会社全体の人件費合計 -->
     <section v-if="isAdmin" class="cost-hero">
-      <div class="cost-hero__band" aria-hidden="true"></div>
       <p class="eyebrow">{{ monthLabel }} の人件費</p>
       <p class="cost-hero__value">
         <span class="yen">¥</span>{{ monthlyCost.toLocaleString() }}
@@ -79,7 +78,6 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
 
     <!-- 一般: 本人の予定給与（見込み） -->
     <section v-else class="cost-hero">
-      <div class="cost-hero__band" aria-hidden="true"></div>
       <p class="eyebrow">{{ monthLabel }} の予定給与</p>
       <p v-if="myProjectedSalary !== null" class="cost-hero__value">
         <span class="yen">¥</span>{{ myProjectedSalary.toLocaleString() }}
@@ -195,12 +193,6 @@ const monthlyCost = computed(() => payroll.value?.monthly_total ?? 0)
   border-radius: var(--r-panel);
   padding: 22px 24px 20px;
   box-shadow: var(--shadow-panel);
-}
-.cost-hero__band {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 6px;
-  background: linear-gradient(180deg, var(--morning), var(--evening), var(--night));
 }
 .cost-hero .eyebrow {
   margin: 0 0 4px;

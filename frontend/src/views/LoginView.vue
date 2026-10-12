@@ -81,13 +81,13 @@ const DevLoginTools = import.meta.env.DEV
   border: 1px solid var(--line-2);
   box-shadow: 0 8px 30px rgba(25, 28, 24, 0.1);
 }
-/* 上端に時間帯(朝→夕→深夜)の帯を1本 */
+/* 上端に黒いライン1本 */
 .login-card::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--morning), var(--evening), var(--night));
+  height: 3px;
+  background: var(--ink);
 }
 
 .brand-row {
