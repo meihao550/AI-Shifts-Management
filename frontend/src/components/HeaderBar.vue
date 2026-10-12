@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { NAvatar, NButton, NDropdown, NModal, NSpace } from 'naive-ui'
+import { NAvatar, NButton, NDrawer, NDrawerContent, NDropdown, NModal, NSpace } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -10,26 +10,31 @@ const auth = useAuthStore()
 
 const currentTitle = computed(() => (route.meta.title as string) ?? '')
 
-const nav = computed(() => {
-  // 一般ユーザーはマイページとシフト表のみ。それ以外は管理者だけ。
-  const items = [
-    { key: 'home', label: 'ホーム', to: '/' },
-    { key: 'my-page', label: 'マイページ', to: '/mypage' },
-    { key: 'shift', label: 'シフト表', to: '/shift' },
-  ]
-  if (auth.isAdmin) {
-    items.push({ key: 'payroll', label: '人件費', to: '/payroll' })
-    items.push({ key: 'employees', label: '従業員管理', to: '/employees' })
-    items.push({ key: 'rules', label: 'ルール設定', to: '/rules' })
-    items.push({ key: 'login-users', label: 'ログイン管理', to: '/login-users' })
-  }
-  return items
-})
+// ナビ項目（アイコン付き）。アイコンは絵文字の仮置き（ランチャーと統一）。
+interface NavItem {
+  key: string
+  label: string
+  to: string
+  icon: string
+  adminOnly?: boolean
+}
+const allNav: NavItem[] = [
+  { key: 'home', label: 'ホーム', to: '/', icon: '🏠' },
+  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: '👤' },
+  { key: 'shift', label: 'シフト表', to: '/shift', icon: '📅' },
+  { key: 'payroll', label: '人件費', to: '/payroll', icon: '💰', adminOnly: true },
+  { key: 'employees', label: '従業員管理', to: '/employees', icon: '👥', adminOnly: true },
+  { key: 'rules', label: 'ルール設定', to: '/rules', icon: '⚙️', adminOnly: true },
+  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: '🔑', adminOnly: true },
+]
+// 一般ユーザーには管理者専用を出さない。
+const nav = computed(() => allNav.filter((i) => !i.adminOnly || auth.isAdmin))
 
-// 左端ハンバーガーのメニュー項目（key=遷移先パス）。選択で push。
-const dropdownOptions = computed(() => nav.value.map((i) => ({ label: i.label, key: i.to })))
-function handleNavSelect(key: string) {
-  router.push(key)
+// 左ドロワー（メニュー）の開閉。
+const showMenu = ref(false)
+function go(to: string) {
+  showMenu.value = false
+  router.push(to)
 }
 
 // public/ 配信物。静的 src だとビルド時に import 解決されるため :src（実行時参照）で渡す。
@@ -55,28 +60,23 @@ function doLogout() {
     <!-- グリッド 1fr auto 1fr: 左(ハンバーガー+ロゴ) / 中央(現在ページ名) / 右(ユーザー) -->
     <div class="header-inner">
       <div class="header-left">
-        <!-- 左端のハンバーガー（PC のみ）。狭幅ではホーム(ランチャー)で代替するため隠す。 -->
-        <div class="nav-hamburger">
-          <NDropdown
-            trigger="click"
-            size="large"
-            placement="bottom-start"
-            :options="dropdownOptions"
-            @select="handleNavSelect"
-          >
-            <button type="button" class="hamburger-btn" aria-label="メニュー">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M4 7h16M4 12h16M4 17h16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
-          </NDropdown>
-        </div>
+        <!-- 左端のハンバーガー（PC のみ）。押すと左ドロワーを開く。 -->
+        <button
+          type="button"
+          class="hamburger-btn nav-hamburger"
+          aria-label="メニューを開く"
+          @click="showMenu = true"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 7h16M4 12h16M4 17h16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
         <RouterLink to="/" class="brand" aria-label="ホーム">
           <img class="mark-img" :src="logoSrc" alt="" aria-hidden="true" />
         </RouterLink>
@@ -107,6 +107,32 @@ function doLogout() {
       </div>
     </div>
   </header>
+
+  <!-- 左スライドのメニュードロワー。右側はオーバーレイで暗転。 -->
+  <NDrawer v-model:show="showMenu" :width="288" placement="left">
+    <NDrawerContent closable>
+      <template #header>
+        <div class="menu-head">
+          <img class="mark-img" :src="logoSrc" alt="" aria-hidden="true" />
+          <span class="menu-title">シフト勤務表</span>
+        </div>
+      </template>
+      <nav class="menu-list">
+        <a
+          v-for="item in nav"
+          :key="item.key"
+          class="menu-item"
+          :class="{ active: route.path === item.to }"
+          href="#"
+          @click.prevent="go(item.to)"
+        >
+          <span class="menu-icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="menu-label">{{ item.label }}</span>
+        </a>
+      </nav>
+    </NDrawerContent>
+  </NDrawer>
+
   <NModal v-model:show="showLogoutConfirm" preset="card" title="確認" style="width: 360px">
     <p style="margin: 0 0 16px">ログアウトしますか？</p>
     <NSpace justify="end">
@@ -225,6 +251,51 @@ function doLogout() {
 .role {
   font-size: 11px;
   color: var(--ink-3);
+}
+
+/* ドロワーのヘッダー（ロゴ+アプリ名） */
+.menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.menu-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* ドロワーのナビ一覧 */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+.menu-item:hover {
+  background: var(--panel-strip);
+}
+.menu-item.active {
+  background: var(--indigo-050);
+  color: var(--indigo-700);
+}
+.menu-icon {
+  font-size: 20px;
+  line-height: 1;
+  width: 24px;
+  text-align: center;
+}
+.menu-label {
+  font-size: 15px;
 }
 
 /* モバイル(狭幅): ハンバーガーは出さず、ナビはホーム(ランチャー)で代替。 */
