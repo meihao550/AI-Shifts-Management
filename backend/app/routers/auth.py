@@ -12,7 +12,7 @@ from app.auth.google import build_authorize_url, exchange_code, fetch_userinfo
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import create_access_token
-from app.models.user import AllowedLogin, User
+from app.models.user import AllowedLogin, User, UserRole
 from app.schemas.auth import LoginResponse, MeResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -93,6 +93,27 @@ async def google_callback(
 
     jwt_token = create_access_token(str(user.id), extra={"role": user.role.value})
     return RedirectResponse(f"{frontend}/auth/callback?token={jwt_token}")
+
+
+@router.post("/dev-login")
+def dev_login(db: Annotated[Session, Depends(get_db)]):
+    """開発(ローカル)環境専用のログイン。Google を経由せず管理者としてログインする。
+
+    本番では ENVIRONMENT=production のため 404 を返す（フロントでもボタンを出さない）。
+    ローカルでの動作確認用。seed 済みの初期管理者 ziyin550@gmail.com として入る。
+    """
+    if settings.environment != "development":
+        raise HTTPException(status_code=404, detail="not found")
+
+    email = "ziyin550@gmail.com"
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None:
+        user = User(email=email, name="開発ユーザー", role=UserRole.admin)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    token = create_access_token(str(user.id), extra={"role": user.role.value})
+    return {"token": token}
 
 
 @router.get("/me", response_model=MeResponse)
