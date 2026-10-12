@@ -19,7 +19,6 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { useEmployeeStore } from '@/stores/employee'
-import { useIsMobile } from '@/composables/useIsMobile'
 import type { Employee, PairConstraint } from '@/types'
 
 const store = useEmployeeStore()
@@ -109,81 +108,6 @@ const insuranceLabels: Record<string, string> = {
   none: 'なし',
 }
 
-const desktopColumns: DataTableColumns<Employee> = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: '名前', key: 'name' },
-  { title: '有給', key: 'paid_leave_amount', render: (r)=> `¥${r.paid_leave_amount}`},
-  { title: '年齢', key: 'age', width: 80 },
-  { title: '時給', key: 'hourly_wage', width: 100, render: (r) => `¥${r.hourly_wage}` },
-  { title: '交通費/日', key: 'transport_cost', width: 100, render: (r) => `¥${r.transport_cost}` },
-  {
-    title: 'Wワーク',
-    key: 'is_dual_worker',
-    width: 80,
-    render: (r) => (r.is_dual_worker ? '○' : ''),
-  },
-  { title: '週回数', key: 'weekly_shifts', width: 80 },
-  {
-    title: '週回数固定',
-    key: 'weekly_shifts_pinned',
-    width: 90,
-    render: (r) => (r.weekly_shifts_pinned ? '○' : ''),
-  },
-  {
-    title: '保険',
-    key: 'insurance_type',
-    width: 90,
-    render: (r) => insuranceLabels[r.insurance_type] ?? r.insurance_type,
-  },
-  {
-    title: '普段の時間',
-    key: 'available_start_hour',
-    width: 120,
-    render: (r) => windowLabel(r),
-  },
-  {
-    title: 'ロール',
-    key: 'role',
-    width: 90,
-    render: (r) => (r.role === 'admin' ? '管理者' : '一般'),
-  },
-  { title: '在籍', key: 'active', width: 70, render: (r) => (r.active ? '○' : '×') },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 240,
-    render: (row) =>
-      h('div', { style: 'display:flex;gap:8px' }, [
-        h(
-          NButton,
-          {
-            size: 'small',
-            onClick: () => openEdit(row),
-          },
-          () => '編集',
-        ),
-        h(
-          NButton,
-          {
-            size: 'small',
-            onClick: () => router.push(`/employees/${row.id}/calendar`),
-          },
-          () => 'カレンダー',
-        ),
-        h(
-          NPopconfirm,
-          { onPositiveClick: () => remove(row.id) },
-          {
-            default: () => '削除しますか？',
-            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => '削除'),
-          },
-        ),
-      ]),
-  },
-]
-
-// スマホ幅では列を ID・名前・詳細(展開)に絞り、残りの項目と操作は展開行で見せる。
-const isMobile = useIsMobile()
 const rowKey = (row: Employee) => row.id
 
 function detailRow(label: string, value: unknown) {
@@ -232,15 +156,12 @@ function renderEmployeeDetail(row: Employee) {
   ])
 }
 
-const mobileColumns: DataTableColumns<Employee> = [
+// PC・スマホ問わず、一覧は ID・名前・詳細(展開行)に統一する。
+const columns: DataTableColumns<Employee> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '名前', key: 'name' },
   { type: 'expand', title: '詳細', renderExpand: renderEmployeeDetail },
 ]
-
-const columns = computed<DataTableColumns<Employee>>(() =>
-  isMobile.value ? mobileColumns : desktopColumns,
-)
 
 // 新規従業員登録の際の初期値
 function openCreate() {

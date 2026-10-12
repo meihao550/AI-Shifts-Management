@@ -16,7 +16,6 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { useAllowedLoginStore } from '@/stores/allowedLogin'
 import { useEmployeeStore } from '@/stores/employee'
-import { useIsMobile } from '@/composables/useIsMobile'
 import type { AllowedLogin, UserRole } from '@/types'
 
 const store = useAllowedLoginStore()
@@ -66,17 +65,6 @@ function renderDeleteButton(row: AllowedLogin) {
   )
 }
 
-const desktopColumns: DataTableColumns<AllowedLogin> = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: '氏名', key: 'name' },
-  { title: 'メールアドレス', key: 'email' },
-  { title: '権限', key: 'role', width: 100, render: (r) => roleLabels[r.role] ?? r.role },
-  { title: '従業員', key: 'employee_id', render: (r) => loginEmployeeLabel(r) },
-  { title: '操作', key: 'actions', width: 100, render: (row) => renderDeleteButton(row) },
-]
-
-// スマホ幅では列を ID・氏名・詳細(展開)に絞り、残りと操作は展開行で見せる。
-const isMobile = useIsMobile()
 const rowKey = (row: AllowedLogin) => row.id
 
 function detailRow(label: string, value: unknown) {
@@ -102,15 +90,12 @@ function renderLoginDetail(row: AllowedLogin) {
   ])
 }
 
-const mobileColumns: DataTableColumns<AllowedLogin> = [
+// PC・スマホ問わず、一覧は ID・氏名・詳細(展開行)に統一する。
+const columns: DataTableColumns<AllowedLogin> = [
   { title: 'ID', key: 'id', width: 60 },
   { title: '氏名', key: 'name' },
   { type: 'expand', title: '詳細', renderExpand: renderLoginDetail },
 ]
-
-const columns = computed<DataTableColumns<AllowedLogin>>(() =>
-  isMobile.value ? mobileColumns : desktopColumns,
-)
 
 function openAdd() {
   form.value = { name: '', email: '', role: 'employee', employeeId: null }
