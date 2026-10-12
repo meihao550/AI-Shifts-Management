@@ -416,10 +416,10 @@ function goPrint() {
       <NButton v-if="shift" type="success" ghost @click="goPrint">印刷プレビュー</NButton>
     </NSpace>
 
-    <NDivider title-placement="left">休日・希望日カレンダー</NDivider>
+    <NDivider dashed title-placement="left">休日・希望日カレンダー</NDivider>
     <AvailabilityCalendar :year="year" :month="month" />
 
-    <NDivider title-placement="left">シフト生成</NDivider>
+    <NDivider dashed title-placement="left">シフト生成</NDivider>
     <div class="gen-row">
       <NSwitch v-model:value="useLLM" />
       <span class="gen-label">生成AIを使用</span>
@@ -446,7 +446,7 @@ function goPrint() {
       </NButton>
     </div>
 
-    <NDivider title-placement="left">シフト表（セルをクリックで編集）</NDivider>
+    <NDivider dashed title-placement="left">シフト表（セルをクリックで編集）</NDivider>
     <NSpin :show="loading || shiftStore.generating">
         <NAlert
           v-if="genWarnings.length"
