@@ -142,6 +142,7 @@ async def generate_shift(
         hard_unavailable=llm_result.get("hard_unavailable", []) or [],
         max_shifts_per_week_override=llm_result.get("max_shifts_per_week_override", {}) or {},
         date_notes=llm_result.get("date_notes", {}) or {},
+        closed_dates=llm_result.get("closed_dates", []) or [],
     )
 
     scheduler = ShiftScheduler(

@@ -112,6 +112,8 @@ class LLMConstraints:
     hard_unavailable: list[dict[str, Any]] = field(default_factory=list)
     max_shifts_per_week_override: dict[int, int] = field(default_factory=dict)
     date_notes: dict[str, str] = field(default_factory=dict)
+    # 全員休み(休業日/定休日)。その日は誰も勤務しない（ハード制約）。LLM が "全員休み" 等を抽出。
+    closed_dates: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -164,6 +166,16 @@ class ShiftScheduler:
             except (KeyError, ValueError, TypeError):
                 continue
         return s
+
+    def _closed_dates(self) -> set[date]:
+        """全員休み(休業日/定休日)。その日は全従業員を配置しない（ハード制約）。"""
+        out: set[date] = set()
+        for s in self.llm.closed_dates:
+            try:
+                out.add(date.fromisoformat(s))
+            except (ValueError, TypeError):
+                continue
+        return out
 
     def _mandatory_lookup(self) -> dict[tuple[int, date], frozenset[str]]:
         # 確定出勤（ADR-0009）。その日は必ず1シフト入れる。
@@ -239,6 +251,14 @@ class ShiftScheduler:
             return SchedulerResult([], "NO_PATTERNS", 0.0, ["シフトパターンが未定義です"])
 
         unavailable = self._unavailable_lookup()
+        # 全員休み(休業日): 全従業員×その日を unavailable に展開し、ハードに配置ゼロとする。
+        # （数式: ∀e, ∀d∈C, ∀p  x[e,d,p]=0。下の unavailable 制約で一括適用される）
+        closed = self._closed_dates()
+        if closed:
+            for e in emps:
+                for d in days:
+                    if d in closed:
+                        unavailable.add((e.id, d))
         preferred = self._preferred_lookup()
         # 確定出勤。勤務不可と衝突する組は勤務不可を優先して除く。
         # {(emp_id, date): 時間窓(拡張時集合。空なら任意)}
@@ -342,6 +362,10 @@ class ShiftScheduler:
         # (date, hour) -> (shortage, surplus)。診断(use_slack)時の警告表示に使う。
         slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]] = {}
         for d in days:
+            if d in closed:
+                # 休業日(全員休み)は必要人数を課さない。全員休みと必要人数(HARD)が
+                # 矛盾して解なしになるのを防ぐ（その日は配置ゼロが正解）。
+                continue
             day_cat = category_for(d)
             for hour, required in required_by_cat.get(day_cat, []):
                 covering = [
