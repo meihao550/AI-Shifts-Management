@@ -20,6 +20,7 @@ SYSTEM_PROMPT = """あなたはシフトスケジューリングの制約抽出�
 
 スキーマ:
 {
+  "closed_dates": ["YYYY-MM-DD"],
   "hard_unavailable": [
     {"employee_id": <int>, "date": "YYYY-MM-DD", "reason": "<string>"}
   ],
@@ -32,8 +33,12 @@ SYSTEM_PROMPT = """あなたはシフトスケジューリングの制約抽出�
   "warnings": ["<string>"]
 }
 
-判断できない情報は空リスト・空オブジェクトとしてください。
-日付は必ず YYYY-MM-DD 形式に正規化してください。
+重要:
+- 「全員休み」「休業」「定休日」など"全従業員がその日は勤務しない"指示は、個別の
+  hard_unavailable に展開せず closed_dates にその日付を入れてください（ハード制約で誰も配置されません）。
+- 特定の従業員だけが勤務不可の場合のみ hard_unavailable を使います。
+- 判断できない情報は空リスト・空オブジェクトとしてください。
+- 日付は必ず YYYY-MM-DD 形式に正規化してください。
 """
 
 
@@ -47,6 +52,7 @@ async def derive_constraints_from_text(
 
     settings = get_settings()
     empty: dict[str, Any] = {
+        "closed_dates": [],
         "hard_unavailable": [],
         "max_shifts_per_week_override": {},
         "date_notes": {},
