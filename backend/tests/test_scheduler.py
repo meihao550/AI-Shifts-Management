@@ -10,6 +10,7 @@ from datetime import time, timedelta
 
 from app.services.scheduler import (
     EmployeeSpec,
+    LLMConstraints,
     PatternSpec,
     ShiftScheduler,
     _pattern_hours,
@@ -107,6 +108,28 @@ def test_each_hour_meets_required_exactly():
     for (_, h), n in coverage.items():
         if h in MORNING_HOURS:
             assert n == 2
+
+
+def test_closed_date_forces_everyone_off():
+    """LLM の closed_dates(全員休み)はハード制約。その日は誰も配置されない。"""
+    scheduler = ShiftScheduler(
+        year=2026,
+        month=2,
+        employees=[_employee(1, "A"), _employee(2, "B")],
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 2)),
+        availabilities=[],
+        llm_constraints=LLMConstraints(closed_dates=["2026-02-15"]),
+        max_solve_seconds=10.0,
+    )
+    result = scheduler.solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # 休業日(2/15)には誰も配置されない（ハード制約）
+    closed = _date(2026, 2, 15)
+    assert all(a["target_date"] != closed for a in result.assignments)
+    # 休業日以外(2/16)は通常どおり朝2人が入る
+    other = _date(2026, 2, 16)
+    assert len([a for a in result.assignments if a["target_date"] == other]) == 2
 
 
 def test_infeasible_reports_shortage_via_slack():
