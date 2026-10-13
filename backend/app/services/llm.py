@@ -1,6 +1,7 @@
 """LLM integration — converts a natural-language monthly note into structured constraints.
 
-Supports Anthropic Claude and OpenAI. Selected via `LLM_PROVIDER`.
+Supports Anthropic Claude, OpenAI, and DeepSeek. Selected via `LLM_PROVIDER`.
+DeepSeek は OpenAI 互換 API のため、openai ライブラリの base_url を差し替えて呼ぶ。
 """
 
 from __future__ import annotations
@@ -69,6 +70,14 @@ async def derive_constraints_from_text(
             return await _call_anthropic(user_prompt, settings.anthropic_api_key, settings.anthropic_model)
         if settings.llm_provider == "openai" and settings.openai_api_key:
             return await _call_openai(user_prompt, settings.openai_api_key, settings.openai_model)
+        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
+            # DeepSeek は OpenAI 互換。base_url を差し替えるだけで同じ呼び出し経路を使う。
+            return await _call_openai(
+                user_prompt,
+                settings.deepseek_api_key,
+                settings.deepseek_model,
+                base_url=settings.deepseek_base_url,
+            )
     except Exception:
         logger.exception("LLM call failed; falling back to empty constraints")
 
@@ -92,10 +101,13 @@ async def _call_anthropic(user_prompt: str, api_key: str, model: str) -> dict[st
     return _parse_json(text)
 
 
-async def _call_openai(user_prompt: str, api_key: str, model: str) -> dict[str, Any]:
+async def _call_openai(
+    user_prompt: str, api_key: str, model: str, base_url: str | None = None
+) -> dict[str, Any]:
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=api_key)
+    # base_url を渡すと DeepSeek 等の OpenAI 互換エンドポイントに向く（省略時は OpenAI 本家）。
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     resp = await client.chat.completions.create(
         model=model,
         response_format={"type": "json_object"},
