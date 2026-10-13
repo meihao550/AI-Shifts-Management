@@ -31,7 +31,10 @@ export const useShiftStore = defineStore('shift', {
     }): Promise<GenerateShiftResult> {
       this.generating = true
       try {
-        const { data } = await api.post<GenerateShiftResult>('/shifts/generate', payload)
+        // 生成は人数が多いと数十秒かかる（ソルバー+LLM）。既定30秒だと途中で諦めるため延長。
+        const { data } = await api.post<GenerateShiftResult>('/shifts/generate', payload, {
+          timeout: 180000,
+        })
         this.shift = {
           id: data.shift_id,
           year: data.year,
