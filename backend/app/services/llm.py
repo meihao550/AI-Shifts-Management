@@ -90,7 +90,7 @@ async def derive_constraints_from_text(
 async def _call_anthropic(user_prompt: str, api_key: str, model: str) -> dict[str, Any]:
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=20.0, max_retries=0)
     message = await client.messages.create(
         model=model,
         max_tokens=1500,
@@ -107,7 +107,8 @@ async def _call_openai(
     from openai import AsyncOpenAI
 
     # base_url を渡すと DeepSeek 等の OpenAI 互換エンドポイントに向く（省略時は OpenAI 本家）。
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    # timeout/max_retries を明示：既定(600秒+リトライ)だと外部APIが遅いとき生成全体がハングするため。
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=20.0, max_retries=0)
     resp = await client.chat.completions.create(
         model=model,
         response_format={"type": "json_object"},
