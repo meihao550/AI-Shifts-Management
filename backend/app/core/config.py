@@ -32,11 +32,15 @@ class Settings(BaseSettings):
     allowed_google_domain: str = ""
 
     # LLM
-    llm_provider: Literal["anthropic", "openai", "none"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "deepseek", "none"] = "anthropic"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
+    # DeepSeek は OpenAI 互換 API（base_url を差し替えて openai ライブラリで呼ぶ）。
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     @property
     def is_production(self) -> bool:

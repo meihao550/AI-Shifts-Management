@@ -108,6 +108,7 @@ locals {
     "google-client-secret",
     "anthropic-api-key",
     "openai-api-key",
+    "deepseek-api-key",
     "database-url", # Supabase の Postgres 接続 URL を入れる
   ]
 }
@@ -209,6 +210,20 @@ resource "google_cloud_run_v2_service" "backend" {
             version = "latest"
           }
         }
+      }
+      env {
+        # DeepSeek（OpenAI 互換）。LLM_PROVIDER=deepseek のとき使用。
+        name = "DEEPSEEK_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "deepseek-api-key"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "DEEPSEEK_MODEL"
+        value = "deepseek-chat"
       }
       resources {
         limits = {
