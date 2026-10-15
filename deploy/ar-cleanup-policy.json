@@ -1,12 +1,17 @@
 [
   {
-    "name": "keep-recent-5",
+    "name": "keep-recent-10",
     "action": { "type": "Keep" },
-    "mostRecentVersions": { "keepCount": 5 }
+    "mostRecentVersions": { "keepCount": 10 }
   },
   {
-    "name": "delete-untagged-7d",
+    "name": "delete-old-30d",
     "action": { "type": "Delete" },
-    "condition": { "tagState": "UNTAGGED", "olderThan": "7d" }
+    "condition": { "olderThan": "2592000s" }
+  },
+  {
+    "name": "delete-untagged-3d",
+    "action": { "type": "Delete" },
+    "condition": { "tagState": "UNTAGGED", "olderThan": "259200s" }
   }
 ]
