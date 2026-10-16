@@ -1,6 +1,5 @@
 """Employee CRUD + availability endpoints."""
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
+from app.core.dates import month_range
 from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
 from app.schemas.employee import (
     AvailabilityCreate,
@@ -91,8 +91,7 @@ def list_all_availabilities(
     if kind is not None:
         stmt = stmt.where(EmployeeAvailability.kind == kind)
     if year is not None and month is not None:
-        month_start = date(year, month, 1)
-        month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        month_start, month_end = month_range(year, month)
         stmt = stmt.where(
             EmployeeAvailability.target_date >= month_start,
             EmployeeAvailability.target_date < month_end,
