@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.employee import Employee, EmployeeAvailability
 from app.models.rule import HourlyStaffingRule, ShiftPattern
 from app.models.shift import Shift, ShiftAssignment
-from app.services.staffing import default_hourly_rules, default_patterns
+from app.services.seeding import seed_defaults_if_missing
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 settings = get_settings()
@@ -27,11 +27,7 @@ def seed(db: Annotated[Session, Depends(get_db)]):
     """Seed default shift patterns, staffing rules, and demo employees."""
     _require_dev()
 
-    if not db.execute(select(ShiftPattern)).first():
-        db.add_all([ShiftPattern(**p) for p in default_patterns()])
-
-    if not db.execute(select(HourlyStaffingRule)).first():
-        db.add_all([HourlyStaffingRule(**r) for r in default_hourly_rules()])
+    seed_defaults_if_missing(db)
 
     if not db.execute(select(Employee)).first():
         db.add_all(
