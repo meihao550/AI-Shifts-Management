@@ -1,3 +1,4 @@
+// 従業員ストア。従業員CRUD・希望(availability)・NGペアのAPI呼び出しをまとめる。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { Availability, AvailabilityKind, Employee, PairConstraint } from '@/types'

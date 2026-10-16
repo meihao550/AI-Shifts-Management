@@ -1,3 +1,4 @@
+// axios ベースの API クライアント。baseURL(本番はビルド時に焼き込み)と JWT 付与を設定。
 import axios from 'axios'
 
 // backend のベースURL（本番はビルド時に VITE_API_BASE_URL を焼き込む）。

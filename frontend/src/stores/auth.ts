@@ -1,3 +1,4 @@
+// 認証ストア。ログインユーザー(Me)の保持・復元(/auth/me)・ログアウトを管理する。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { Me } from '@/types'

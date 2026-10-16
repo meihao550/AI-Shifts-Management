@@ -1,3 +1,4 @@
+// ルールストア。シフトパターンと時間別必要人数の取得・更新を扱う。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { HourlyStaffingRule, ShiftPattern } from '@/types'
