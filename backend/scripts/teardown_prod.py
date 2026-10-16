@@ -21,13 +21,14 @@ from __future__ import annotations
 
 import os
 import sys
-from urllib.parse import urlsplit
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_HERE))  # backend/（app を import するため）
+sys.path.insert(0, _HERE)  # scripts/（_prod_db を import するため）
 
+from _prod_db import db_host  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 
-from app.core.config import get_settings  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.models.employee import Employee  # noqa: E402
 from app.models.shift import Shift, ShiftAssignment  # noqa: E402
@@ -35,18 +36,10 @@ from app.models.shift import Shift, ShiftAssignment  # noqa: E402
 DEMO_DOMAIN = "@example.com"
 
 
-def _db_host() -> str:
-    try:
-        url = get_settings().database_url.replace("postgresql+psycopg", "postgresql")
-        return urlsplit(url).hostname or "?"
-    except Exception:
-        return "?"
-
-
 def main() -> None:
     do_delete = "--yes" in sys.argv
     purge = "--purge-empty-shifts" in sys.argv
-    print(f"接続先DBホスト: {_db_host()}")
+    print(f"接続先DBホスト: {db_host()}")
     db = SessionLocal()
     try:
         demo = (

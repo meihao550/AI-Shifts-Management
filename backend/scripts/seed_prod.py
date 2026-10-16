@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import os
 import sys
-from urllib.parse import urlsplit
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_HERE))  # backend/（app を import するため）
+sys.path.insert(0, _HERE)  # scripts/（_prod_db を import するため）
 
+from _prod_db import db_host  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
-from app.core.config import get_settings  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.models.employee import Employee  # noqa: E402
 from app.services.seeding import seed_defaults_if_missing  # noqa: E402
@@ -27,16 +28,8 @@ from app.services.seeding import seed_defaults_if_missing  # noqa: E402
 DEMO_DOMAIN = "@example.com"  # この email ドメインの従業員＝デモデータの目印
 
 
-def _db_host() -> str:
-    try:
-        url = get_settings().database_url.replace("postgresql+psycopg", "postgresql")
-        return urlsplit(url).hostname or "?"
-    except Exception:
-        return "?"
-
-
 def main() -> None:
-    print(f"接続先DBホスト: {_db_host()}")
+    print(f"接続先DBホスト: {db_host()}")
     db = SessionLocal()
     try:
         # 生成に必須のマスタ（無ければ既定値を投入）。汎用設定なので残しても害なし。
