@@ -23,6 +23,7 @@ import { useRuleStore } from '@/stores/rule'
 import { useAuthStore } from '@/stores/auth'
 import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
+import { isoDate } from '@/utils/date'
 
 // セル編集で「有給」を表すための特別な選択値
 const PAID_LEAVE_VALUE = '__paid_leave__'
@@ -131,13 +132,6 @@ function timeRange(a: ShiftAssignment): string {
   return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
 }
 
-function isoLocalDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 type Band = 'morning' | 'evening' | 'night' | null
 
 interface AssignmentCell {
@@ -155,7 +149,7 @@ function categoryOfCode(shiftCode: string | null): string | null {
 
 function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
   if (!shift.value) return { label: '', paidLeave: false, band: null }
-  const iso = isoLocalDate(date)
+  const iso = isoDate(date)
 
   // 有給日はシフトより優先して「有給」と表示する
   if (paidLeaveFor(employeeId, iso)) {
@@ -183,13 +177,13 @@ const cellMap = computed(() => {
   const m = new Map<string, AssignmentCell>()
   for (const emp of employeeStore.employees) {
     for (const d of days.value) {
-      m.set(`${emp.id}|${isoLocalDate(d)}`, assignmentsFor(emp.id, d))
+      m.set(`${emp.id}|${isoDate(d)}`, assignmentsFor(emp.id, d))
     }
   }
   return m
 })
 function cellAt(employeeId: number, date: Date): AssignmentCell {
-  return cellMap.value.get(`${employeeId}|${isoLocalDate(date)}`) ?? EMPTY_CELL
+  return cellMap.value.get(`${employeeId}|${isoDate(date)}`) ?? EMPTY_CELL
 }
 
 function cellStyle(date: Date) {
@@ -222,7 +216,7 @@ const shortfalls = computed<Shortfall[]>(() => {
   const out: Shortfall[] = []
   if (!shift.value) return out
   for (const d of days.value) {
-    const iso = isoLocalDate(d)
+    const iso = isoDate(d)
     const dayCategory = d.getDay() === 0 || d.getDay() === 6 ? 'weekend_or_holiday' : 'weekday'
     // その日の各拡張時のカバレッジを集計
     const cover: Record<number, number> = {}
@@ -251,7 +245,7 @@ const cellEditOptions = computed(() => [
 
 function openCellEdit(employeeId: number, date: Date) {
   if (!shift.value) return
-  const iso = isoLocalDate(date)
+  const iso = isoDate(date)
   if (paidLeaveFor(employeeId, iso)) {
     editShiftType.value = PAID_LEAVE_VALUE
   } else {
