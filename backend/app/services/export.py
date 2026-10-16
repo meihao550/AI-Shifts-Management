@@ -65,6 +65,7 @@ def export_pdf(
     assignments: list[ShiftAssignment],
     employees: list[Employee],
 ) -> bytes:
+    """当月のシフト表を横向きA4のPDF(bytes)として出力する。"""
     font_name = _register_jp_font()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -117,6 +118,7 @@ def export_excel(
     assignments: list[ShiftAssignment],
     employees: list[Employee],
 ) -> bytes:
+    """当月のシフト表を Excel(.xlsx) の bytes として出力する。"""
     wb = Workbook()
     ws = wb.active
     ws.title = f"{year}-{month:02d}"

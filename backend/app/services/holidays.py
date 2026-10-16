@@ -6,10 +6,12 @@ import jpholiday
 
 
 def is_holiday(d: date) -> bool:
+    """日本の祝日かどうか（jpholiday 判定）。"""
     return jpholiday.is_holiday(d)
 
 
 def is_weekend_or_holiday(d: date) -> bool:
+    """土日または祝日かどうか（weekday() は 月=0..日=6、5以上が土日）。"""
     return d.weekday() >= 5 or is_holiday(d)
 
 
@@ -22,5 +24,5 @@ def is_busy_day(d: date) -> bool:
 
 
 def category_for(d: date) -> str:
-    # 必要人数の区分。金・土・日・祝は繁忙区分（要件6.3）。
+    """必要人数の day_category を返す。金・土・日・祝は繁忙区分 weekend_or_holiday（要件6.3）。"""
     return "weekend_or_holiday" if is_busy_day(d) else "weekday"

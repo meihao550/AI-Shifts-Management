@@ -21,5 +21,6 @@ DatabaseSession = Annotated[Session, Depends(get_db)]
 
 @router.get("", response_model=list[Notification])
 def list_notifications(_user: CurrentUser, db: DatabaseSession):
+    """ダッシュボード用の通知一覧を返す（日本時間の今日を基準に組み立て）。"""
     today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
     return build_notifications(db, today)

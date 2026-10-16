@@ -1,3 +1,4 @@
+// シフトストア。月次シフトの取得・生成(LLM/ソルバー)・割当保存・人件費取得を扱う。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { GenerateShiftResult, PayrollReport, Shift, ShiftAssignment } from '@/types'

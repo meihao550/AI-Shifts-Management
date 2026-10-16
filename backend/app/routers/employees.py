@@ -1,6 +1,5 @@
 """Employee CRUD + availability endpoints."""
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import AdminUser, CurrentUser
 from app.core.database import get_db
+from app.core.dates import month_range
 from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
 from app.schemas.employee import (
     AvailabilityCreate,
@@ -27,6 +27,7 @@ def list_employees(
     db: Annotated[Session, Depends(get_db)],
     active_only: bool = False,
 ):
+    """従業員一覧を返す（active_only=True なら在籍中のみ）。"""
     stmt = select(Employee).order_by(Employee.id)
     if active_only:
         stmt = stmt.where(Employee.active.is_(True))
@@ -39,6 +40,7 @@ def create_employee(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """従業員を新規作成する（管理者のみ）。"""
     employee = Employee(**payload.model_dump())
     db.add(employee)
     db.commit()
@@ -53,6 +55,7 @@ def update_employee(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """従業員を部分更新する（送られた項目だけ上書き。管理者のみ）。"""
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="employee not found")
@@ -70,6 +73,7 @@ def delete_employee(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """従業員を削除する（希望・シフト割当は CASCADE で連鎖削除。管理者のみ）。"""
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="employee not found")
@@ -91,8 +95,7 @@ def list_all_availabilities(
     if kind is not None:
         stmt = stmt.where(EmployeeAvailability.kind == kind)
     if year is not None and month is not None:
-        month_start = date(year, month, 1)
-        month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        month_start, month_end = month_range(year, month)
         stmt = stmt.where(
             EmployeeAvailability.target_date >= month_start,
             EmployeeAvailability.target_date < month_end,
@@ -107,6 +110,7 @@ def list_availabilities(
     _user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """指定した従業員の希望・不可・有給（availability）一覧を返す。"""
     stmt = (
         select(EmployeeAvailability)
         .where(EmployeeAvailability.employee_id == employee_id)
@@ -125,6 +129,7 @@ def create_availability(
     _user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """希望・不可・有給（availability）を1件登録する。"""
     row = EmployeeAvailability(**payload.model_dump())
     db.add(row)
     db.commit()
@@ -138,6 +143,7 @@ def delete_availability(
     _user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """希望・不可・有給（availability）を1件削除する。"""
     row = db.get(EmployeeAvailability, availability_id)
     if not row:
         raise HTTPException(status_code=404, detail="availability not found")

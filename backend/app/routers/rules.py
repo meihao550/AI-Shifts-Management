@@ -23,6 +23,7 @@ router = APIRouter(prefix="/rules", tags=["rules"])
 
 @router.get("/patterns", response_model=list[ShiftPatternRead])
 def list_patterns(_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
+    """シフトパターン一覧を返す。"""
     return list(db.execute(select(ShiftPattern).order_by(ShiftPattern.id)).scalars())
 
 
@@ -32,6 +33,7 @@ def create_pattern(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフトパターンを新規作成する（時刻からコードを自動生成。重複は409。管理者のみ）。"""
     # 時刻からコード・表示名・区分を自動生成する。パターンの区別(基本/Wワーク)は廃止(ADR-0004)。
     code = make_pattern_code(payload.start_time, payload.end_time)
     existing = db.execute(
@@ -60,6 +62,7 @@ def update_pattern(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフトパターンを更新する（時刻変更時はコード・区分を再生成。管理者のみ）。"""
     pat = db.get(ShiftPattern, pattern_id)
     if not pat:
         raise HTTPException(status_code=404, detail="pattern not found")
@@ -96,6 +99,7 @@ def update_pattern(
 
 @router.delete("/patterns/{pattern_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pattern(pattern_id: int, _admin: AdminUser, db: Annotated[Session, Depends(get_db)]):
+    """シフトパターンを削除する（管理者のみ）。"""
     row = db.get(ShiftPattern, pattern_id)
     if not row:
         raise HTTPException(status_code=404, detail="pattern not found")
@@ -105,6 +109,7 @@ def delete_pattern(pattern_id: int, _admin: AdminUser, db: Annotated[Session, De
 
 @router.get("/hourly-staffing", response_model=list[HourlyStaffingRuleRead])
 def list_hourly_staffing(_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
+    """時間別必要人数（平日/休日 × 各時）の一覧を返す。"""
     return list(
         db.execute(
             select(HourlyStaffingRule).order_by(
@@ -120,6 +125,7 @@ def replace_hourly_staffing(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """時間別必要人数を丸ごと置き換える（全削除→一括登録。管理者のみ）。"""
     db.execute(HourlyStaffingRule.__table__.delete())
     rows = [HourlyStaffingRule(**item.model_dump()) for item in payload]
     db.add_all(rows)

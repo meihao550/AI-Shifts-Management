@@ -1,6 +1,5 @@
 """Payroll (labor cost) endpoints."""
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth.deps import CurrentUser
 from app.core.database import get_db
+from app.core.dates import month_range
 from app.models.employee import AvailabilityKind, Employee, EmployeeAvailability
 from app.models.rule import ShiftPattern
 from app.models.shift import Shift
@@ -25,6 +25,7 @@ def get_payroll(
     year: int = Query(...),
     month: int = Query(..., ge=1, le=12),
 ):
+    """指定した年月の人件費レポートを返す（シフトが無ければ404）。"""
     shift = db.execute(
         select(Shift)
         .options(selectinload(Shift.assignments))
@@ -38,8 +39,7 @@ def get_payroll(
     employees_by_id = {e.id: e for e in employees}
 
     # 当月の有給日を集計対象にする（(従業員ID, 日付) の一覧）
-    month_start = date(year, month, 1)
-    month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    month_start, month_end = month_range(year, month)
     paid_leave_rows = db.execute(
         select(EmployeeAvailability.employee_id, EmployeeAvailability.target_date).where(
             EmployeeAvailability.kind == AvailabilityKind.paid_leave,

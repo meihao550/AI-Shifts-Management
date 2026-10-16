@@ -3,51 +3,21 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
-// ナビのアイコン（idea/icon のラインアート）。マスク画像を currentColor で塗る（ライト/ダーク両対応）。
-import myPageIcon from '@/assets/nav/my-page.png'
-import shiftIcon from '@/assets/nav/shift.png'
-import requestsIcon from '@/assets/nav/requests.png'
-import payrollIcon from '@/assets/nav/payroll.png'
-import employeesIcon from '@/assets/nav/employees.png'
-import rulesIcon from '@/assets/nav/rules.png'
-import loginUsersIcon from '@/assets/nav/login-users.png'
+import { navItems } from '@/config/nav'
+import { maskIconStyle } from '@/utils/icon'
+import StarIcon from '@/components/StarIcon.vue'
 
 const auth = useAuthStore()
 const themeStore = useThemeStore()
 
-// マスク画像を CSS 変数で渡す（.nav-ic が currentColor で塗る）。
-function iconStyle(url: string) {
-  return { '--nav-ic': `url(${url})` }
-}
-
-interface Tile {
-  key: string
-  label: string
-  to: string
-  icon: string
-  adminOnly?: boolean
-}
-
-// スマホのホーム画面のように、各ページへ飛べるアイコンタイル。
-// icon は絵文字の仮置き（後で画像へ差し替え可能）。
-const allTiles: Tile[] = [
-  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: myPageIcon },
-  { key: 'shift', label: 'シフト表', to: '/shift', icon: shiftIcon },
-  { key: 'requests', label: '希望提出', to: '/requests', icon: requestsIcon },
-  { key: 'payroll', label: '人件費', to: '/payroll', icon: payrollIcon, adminOnly: true },
-  { key: 'employees', label: '従業員管理', to: '/employees', icon: employeesIcon, adminOnly: true },
-  { key: 'rules', label: 'ルール設定', to: '/rules', icon: rulesIcon, adminOnly: true },
-  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: loginUsersIcon, adminOnly: true },
-]
-
-// 一般ユーザーには管理者専用タイルを出さない。
-const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin))
+// 一般ユーザーには管理者専用タイルを出さない。ナビ定義は config/nav.ts で共有。
+const tiles = computed(() => navItems.filter((t) => !t.adminOnly || auth.isAdmin))
 </script>
 
 <template>
   <div class="launcher">
     <RouterLink v-for="t in tiles" :key="t.key" :to="t.to" class="tile">
-      <span class="tile__box"><span class="tile__icon nav-ic" :style="iconStyle(t.icon)"></span></span>
+      <span class="tile__box"><span class="tile__icon nav-ic" :style="maskIconStyle(t.icon)"></span></span>
       <span class="tile__label">{{ t.label }}</span>
     </RouterLink>
 
@@ -55,15 +25,7 @@ const tiles = computed(() => allTiles.filter((t) => !t.adminOnly || auth.isAdmin
     <button type="button" class="tile tile--button" @click="themeStore.toggle()">
       <span class="tile__box">
         <span class="tile__icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-              :fill="themeStore.isDark ? 'currentColor' : 'none'"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <StarIcon :size="40" :filled="themeStore.isDark" />
         </span>
       </span>
       <span class="tile__label">{{ themeStore.isDark ? '明るくする' : '暗くする' }}</span>

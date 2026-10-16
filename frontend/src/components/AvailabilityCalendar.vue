@@ -14,6 +14,8 @@ import {
 import { useEmployeeStore } from '@/stores/employee'
 import { useRuleStore } from '@/stores/rule'
 import type { Availability, AvailabilityKind } from '@/types'
+import { isoDate } from '@/utils/date'
+import { weekdayColor } from '@/utils/weekday'
 
 // employeeId を渡すと従業員を固定（従業員セレクトを隠す）。従業員管理のカレンダーで使う。
 const props = defineProps<{ year: number; month: number; employeeId?: number }>()
@@ -113,13 +115,6 @@ onMounted(async () => {
     selectedEmployeeId.value = employeeStore.employees[0].id
   }
 })
-
-function isoDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 function itemsOn(d: Date): Availability[] {
   const iso = isoDate(d)
@@ -282,10 +277,8 @@ function noteDisplay(a: Availability): string {
 }
 
 function dayColor(d: Date) {
-  const w = d.getDay()
-  if (w === 0) return '#c92a2a'
-  if (w === 6) return '#1971c2'
-  return '#333'
+  // 平日は従来どおり既定色 #333。土日のみ weekdayColor で色付け。
+  return weekdayColor(d) ?? '#333'
 }
 </script>
 

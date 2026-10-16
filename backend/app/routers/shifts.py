@@ -54,6 +54,7 @@ def get_shift(
     year: int = Query(...),
     month: int = Query(..., ge=1, le=12),
 ):
+    """指定した年月のシフト表を割当込みで返す（無ければ404）。"""
     shift = db.execute(
         select(Shift)
         .options(selectinload(Shift.assignments))
@@ -70,6 +71,11 @@ async def generate_shift(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフトを自動生成する（管理者のみ）。
+
+    use_llm かつ自然言語メモがあれば LLM で制約（全員休み/個別不可/週回数）を抽出し、
+    CP-SAT ソルバー(ShiftScheduler)で最適配置を解いて保存・返却する。
+    """
     employees = list(db.execute(select(Employee).where(Employee.active.is_(True))).scalars())
     if not employees:
         raise HTTPException(
@@ -214,6 +220,7 @@ def replace_assignments(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフトの割当を丸ごと差し替える（手動編集の保存。管理者のみ）。"""
     shift = db.get(Shift, shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="shift not found")
@@ -244,6 +251,7 @@ def finalize(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフトのステータスを finalized（確定）にする（管理者のみ）。"""
     shift = db.execute(
         select(Shift).options(selectinload(Shift.assignments)).where(Shift.id == shift_id)
     ).scalar_one_or_none()
@@ -261,6 +269,7 @@ def export_shift_pdf(
     _user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフト表を PDF でダウンロードする。"""
     shift = _load_shift_with_deps(db, shift_id)
     employees = list(db.execute(select(Employee).order_by(Employee.id)).scalars())
     pdf = export_pdf(shift.year, shift.month, list(shift.assignments), employees)
@@ -279,6 +288,7 @@ def export_shift_excel(
     _user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """シフト表を Excel でダウンロードする。"""
     shift = _load_shift_with_deps(db, shift_id)
     employees = list(db.execute(select(Employee).order_by(Employee.id)).scalars())
     xlsx = export_excel(shift.year, shift.month, list(shift.assignments), employees)

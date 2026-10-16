@@ -4,15 +4,9 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDrawer, NDrawerContent, NDropdown, NModal, NSpace } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
-// ナビのアイコン（idea/icon のラインアート）。白背景を透明化したマスク画像で、
-// CSS の mask-image + background-color: currentColor により文字色で塗る（ライト/ダーク両対応）。
-import myPageIcon from '@/assets/nav/my-page.png'
-import shiftIcon from '@/assets/nav/shift.png'
-import requestsIcon from '@/assets/nav/requests.png'
-import payrollIcon from '@/assets/nav/payroll.png'
-import employeesIcon from '@/assets/nav/employees.png'
-import rulesIcon from '@/assets/nav/rules.png'
-import loginUsersIcon from '@/assets/nav/login-users.png'
+import { navItems } from '@/config/nav'
+import { maskIconStyle } from '@/utils/icon'
+import StarIcon from '@/components/StarIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,31 +15,8 @@ const themeStore = useThemeStore()
 
 const currentTitle = computed(() => (route.meta.title as string) ?? '')
 
-// ナビ項目（アイコン付き）。アイコンは絵文字の仮置き（ランチャーと統一）。
-interface NavItem {
-  key: string
-  label: string
-  to: string
-  icon: string
-  adminOnly?: boolean
-}
-const allNav: NavItem[] = [
-  // ホームは PC では自動的にマイページへ飛ぶため、メニューには出さない（ドロワーは PC 専用）。
-  { key: 'my-page', label: 'マイページ', to: '/mypage', icon: myPageIcon },
-  { key: 'shift', label: 'シフト表', to: '/shift', icon: shiftIcon },
-  { key: 'requests', label: '希望提出', to: '/requests', icon: requestsIcon },
-  { key: 'payroll', label: '人件費', to: '/payroll', icon: payrollIcon, adminOnly: true },
-  { key: 'employees', label: '従業員管理', to: '/employees', icon: employeesIcon, adminOnly: true },
-  { key: 'rules', label: 'ルール設定', to: '/rules', icon: rulesIcon, adminOnly: true },
-  { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: loginUsersIcon, adminOnly: true },
-]
-
-// マスク画像を CSS 変数で渡す（.nav-ic が currentColor で塗る）。
-function iconStyle(url: string) {
-  return { '--nav-ic': `url(${url})` }
-}
-// 一般ユーザーには管理者専用を出さない。
-const nav = computed(() => allNav.filter((i) => !i.adminOnly || auth.isAdmin))
+// 一般ユーザーには管理者専用（adminOnly）を出さない。ナビ定義は config/nav.ts で共有。
+const nav = computed(() => navItems.filter((i) => !i.adminOnly || auth.isAdmin))
 
 // 左ドロワー（メニュー）の開閉。
 const showMenu = ref(false)
@@ -143,7 +114,7 @@ function doLogout() {
           href="#"
           @click.prevent="go(item.to)"
         >
-          <span class="menu-icon nav-ic" aria-hidden="true" :style="iconStyle(item.icon)"></span>
+          <span class="menu-icon nav-ic" aria-hidden="true" :style="maskIconStyle(item.icon)"></span>
           <span class="menu-label">{{ item.label }}</span>
         </a>
 
@@ -151,15 +122,7 @@ function doLogout() {
         <div class="menu-divider"></div>
         <button type="button" class="menu-item theme-toggle" @click="themeStore.toggle()">
           <span class="menu-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path
-                d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                :fill="themeStore.isDark ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-              />
-            </svg>
+            <StarIcon :filled="themeStore.isDark" />
           </span>
           <span class="menu-label">{{ themeStore.isDark ? '画面を明るくする' : '画面を暗くする' }}</span>
         </button>

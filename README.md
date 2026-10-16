@@ -6,6 +6,7 @@
 - **使い方ガイド（エンドユーザー向け）**: [`docs/USAGE.md`](docs/USAGE.md)
 - **企画書**: [`docs/requirements.md`](docs/requirements.md)
 - **チュートリアル（初心者向け）**: [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
+- **構成マップ（ファイルごとの役割）**: [`docs/architecture.md`](docs/architecture.md)
 - **デプロイ手順**: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
 - **開発ルール**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - **要件定義**: [`Requirements-document`](docs/project-requirements-ver1.1.md)
