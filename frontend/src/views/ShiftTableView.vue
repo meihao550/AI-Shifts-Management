@@ -434,15 +434,9 @@ function goPrint() {
           </div>
           <template v-if="useLLM">
             <p class="gen-desc">
-              今月特有の事情（イベント、休暇、シフト希望など）を自然言語で入力できます。CP-SAT が
-              ハード制約（必要人数）・ソフト制約（希望）を満たす最適解を探索します。
             </p>
-            <NInput
-              v-model:value="naturalNote"
-              type="textarea"
-              :autosize="{ minRows: 3, maxRows: 8 }"
-              placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。"
-            />
+            <NInput v-model:value="naturalNote" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }"
+              placeholder="例: 8/15 は田中さんが夏季休暇で不可。8/20 は繁忙期のため朝を +1 人にしてください。" />
           </template>
         </NCollapseItem>
       </NCollapse>
@@ -451,141 +445,97 @@ function goPrint() {
     <NDivider dashed title-placement="left">{{ auth.isAdmin ? 'シフト表（セルをクリックで編集）' : 'シフト表' }}</NDivider>
     <!-- シフト生成ボタンはシフト表見出しの直下に配置（管理者のみ）。 -->
     <div v-if="auth.isAdmin" class="gen-actions">
-      <NButton
-        type="primary"
-        :loading="shiftStore.generating"
-        class="generate-btn"
-        @click="generate"
-      >
+      <NButton type="primary" :loading="shiftStore.generating" class="generate-btn" @click="generate">
         シフトを生成
       </NButton>
     </div>
     <NSpin :show="loading || shiftStore.generating">
-        <NAlert
-          v-if="genWarnings.length && auth.isAdmin"
-          type="warning"
-          title="シフト生成の注意"
-          closable
-          style="margin-bottom: 12px"
-          @close="genWarnings = []"
-        >
-          <ul class="gen-warning-list">
-            <li v-for="(w, i) in genWarnings" :key="i">{{ w }}</li>
-          </ul>
-        </NAlert>
-        <NAlert v-if="!shift" type="info">
-          このシフトはまだ作成されていません。上の「シフトを生成」から作成できます。
-        </NAlert>
-        <template v-else>
-          <NAlert
-            v-if="shortfalls.length && auth.isAdmin"
-            type="warning"
-            title="人数が規定に足りていません"
-            style="margin-bottom: 12px"
-          >
-            <div class="shortfall-list">
-              <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
-                {{ s.day }}日 {{ s.hour }}:00台 {{ s.have }}/{{ s.need }}人
-              </span>
-            </div>
-            <p class="shortfall-note">
-              ※土日は休日扱いで判定しています（祝日は未考慮）。セルを編集して「反映」すると自動保存されます。
-            </p>
-          </NAlert>
-          <div class="table-scroll">
-            <table class="shift-grid">
-              <thead>
-                <tr>
-                  <th class="fixed">日付</th>
-                  <th v-for="emp in employeeStore.employees" :key="emp.id">
-                    {{ emp.name }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="d in days" :key="d.getTime()">
-                  <td class="fixed" :style="cellStyle(d)">
-                    {{ d.getDate() }}
-                    <small>（{{ '日月火水木金土'[d.getDay()] }}）</small>
-                  </td>
-                  <template v-for="emp in employeeStore.employees" :key="emp.id">
-                    <td
-                      class="cell"
-                      :class="[
-                        cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
-                        {
-                          'cell-editable': auth.isAdmin,
-                          'cell-paid-leave': cellAt(emp.id, d).paidLeave,
-                          'is-empty': !cellAt(emp.id, d).label,
-                        },
-                      ]"
-                      :title="auth.isAdmin ? 'クリックで編集' : undefined"
-                      @click="auth.isAdmin && openCellEdit(emp.id, d)"
-                    >
-                      {{ cellAt(emp.id, d).label }}
-                    </td>
-                  </template>
-                </tr>
-              </tbody>
-            </table>
-            <div class="legend">
-              <span class="legend-item"><i class="sw band-morning"></i>朝</span>
-              <span class="legend-item"><i class="sw band-evening"></i>夕</span>
-              <span class="legend-item"><i class="sw band-night"></i>深夜</span>
-              <span class="legend-sep"></span>
-              <span class="legend-item"><i class="sw sw--mismatch"></i>メイン外</span>
-              <span class="legend-item"><i class="sw sw--leave"></i>有給</span>
-            </div>
+      <NAlert v-if="genWarnings.length && auth.isAdmin" type="warning" title="シフト生成の注意" closable
+        style="margin-bottom: 12px" @close="genWarnings = []">
+        <ul class="gen-warning-list">
+          <li v-for="(w, i) in genWarnings" :key="i">{{ w }}</li>
+        </ul>
+      </NAlert>
+      <NAlert v-if="!shift" type="info">
+        このシフトはまだ作成されていません。上の「シフトを生成」から作成できます。
+      </NAlert>
+      <template v-else>
+        <NAlert v-if="shortfalls.length && auth.isAdmin" type="warning" title="人数が規定に足りていません"
+          style="margin-bottom: 12px">
+          <div class="shortfall-list">
+            <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
+              {{ s.day }}日 {{ s.hour }}:00台 {{ s.have }}/{{ s.need }}人
+            </span>
           </div>
-        </template>
-      </NSpin>
+          <p class="shortfall-note">
+            ※土日は休日扱いで判定しています（祝日は未考慮）。セルを編集して「反映」すると自動保存されます。
+          </p>
+        </NAlert>
+        <div class="table-scroll">
+          <table class="shift-grid">
+            <thead>
+              <tr>
+                <th class="fixed">日付</th>
+                <th v-for="emp in employeeStore.employees" :key="emp.id">
+                  {{ emp.name }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="d in days" :key="d.getTime()">
+                <td class="fixed" :style="cellStyle(d)">
+                  {{ d.getDate() }}
+                  <small>（{{ '日月火水木金土'[d.getDay()] }}）</small>
+                </td>
+                <template v-for="emp in employeeStore.employees" :key="emp.id">
+                  <td class="cell" :class="[
+                    cellAt(emp.id, d).band ? `band-${cellAt(emp.id, d).band}` : '',
+                    {
+                      'cell-editable': auth.isAdmin,
+                      'cell-paid-leave': cellAt(emp.id, d).paidLeave,
+                      'is-empty': !cellAt(emp.id, d).label,
+                    },
+                  ]" :title="auth.isAdmin ? 'クリックで編集' : undefined"
+                    @click="auth.isAdmin && openCellEdit(emp.id, d)">
+                    {{ cellAt(emp.id, d).label }}
+                  </td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+          <div class="legend">
+            <span class="legend-item"><i class="sw band-morning"></i>朝</span>
+            <span class="legend-item"><i class="sw band-evening"></i>夕</span>
+            <span class="legend-item"><i class="sw band-night"></i>深夜</span>
+            <span class="legend-sep"></span>
+            <span class="legend-item"><i class="sw sw--mismatch"></i>メイン外</span>
+            <span class="legend-item"><i class="sw sw--leave"></i>有給</span>
+          </div>
+        </div>
+      </template>
+    </NSpin>
 
     <NModal v-model:show="availDialog" preset="card" title="希望登録" style="width: 480px">
       <NSpace vertical>
-        <NSelect
-          v-model:value="availabilityForm.employee_id"
-          placeholder="従業員を選択"
-          :options="employeeOptions"
-        />
-        <NDatePicker
-          v-model:formatted-value="availabilityForm.target_date"
-          value-format="yyyy-MM-dd"
-          type="date"
-          style="width: 100%"
-        />
-        <NSelect
-          v-model:value="availabilityForm.kind"
-          :options="[
-            { label: '勤務不可 (絶対)', value: 'unavailable' },
-            { label: '入りたい (希望)', value: 'preferred' },
-          ]"
-        />
-        <NSelect
-          v-model:value="availabilityForm.shift_type"
-          placeholder="シフト種別 (任意)"
-          clearable
-          :options="patternOptions"
-        />
+        <NSelect v-model:value="availabilityForm.employee_id" placeholder="従業員を選択" :options="employeeOptions" />
+        <NDatePicker v-model:formatted-value="availabilityForm.target_date" value-format="yyyy-MM-dd" type="date"
+          style="width: 100%" />
+        <NSelect v-model:value="availabilityForm.kind" :options="[
+          { label: '勤務不可 (絶対)', value: 'unavailable' },
+          { label: '入りたい (希望)', value: 'preferred' },
+        ]" />
+        <NSelect v-model:value="availabilityForm.shift_type" placeholder="シフト種別 (任意)" clearable
+          :options="patternOptions" />
         <NInput v-model:value="availabilityForm.note" placeholder="メモ (任意)" />
         <NButton type="primary" block @click="submitAvailability">登録</NButton>
       </NSpace>
     </NModal>
 
-    <NModal
-      :show="!!editCell"
-      preset="card"
-      title="シフト編集"
-      style="width: 360px"
-      @update:show="(v: boolean) => { if (!v) editCell = null }"
-    >
+    <NModal :show="!!editCell" preset="card" title="シフト編集" style="width: 360px"
+      @update:show="(v: boolean) => { if (!v) editCell = null }">
       <NSpace v-if="editCell" vertical>
         <p style="margin: 0">{{ editCell.empName }} / {{ editCell.date }}</p>
-        <NSelect
-          v-model:value="editShiftType"
-          :options="cellEditOptions"
-          clearable
-          placeholder="シフトなし（休み）"
-        />
+        <NSelect v-model:value="editShiftType" :options="cellEditOptions" clearable placeholder="シフトなし（休み）" />
         <NSpace justify="end">
           <NButton @click="editCell = null">キャンセル</NButton>
           <NButton type="primary" @click="saveCellEdit">反映</NButton>
@@ -601,47 +551,58 @@ function goPrint() {
   display: flex;
   flex-direction: column;
 }
+
 .gen-row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .gen-label {
   font-weight: 600;
 }
+
 .gen-desc {
   margin: 10px 0;
   color: var(--ink-3);
   font-size: 13px;
   line-height: 1.7;
 }
+
 .gen-actions {
   margin-top: 12px;
   margin-bottom: 12px;
 }
+
 /* シフト生成ボタンの角丸（要望: 28px） */
 .generate-btn {
   border-radius: 28px;
 }
+
 /* アコーディオンに区切り線を足して見やすく（idea/accordion.png）。
    各項目を上下の罫線で仕切り、ヘッダーは少し高め＋ホバーで淡く着色。 */
 .shift-collapse {
   margin-bottom: 8px;
 }
+
 .shift-collapse :deep(.n-collapse-item) {
   border-top: 1px solid var(--line-2);
   margin-top: 0;
 }
+
 .shift-collapse :deep(.n-collapse-item:last-child) {
   border-bottom: 1px solid var(--line-2);
 }
+
 .shift-collapse :deep(.n-collapse-item__header) {
   padding: 14px 8px !important;
   font-weight: 600;
 }
+
 .shift-collapse :deep(.n-collapse-item__header:hover) {
   background: var(--panel-strip);
 }
+
 .shift-collapse :deep(.n-collapse-item__content-inner) {
   padding: 4px 8px 12px;
 }
@@ -653,11 +614,13 @@ function goPrint() {
   border-radius: 8px;
   background: var(--panel);
 }
+
 .shift-grid {
   border-collapse: collapse;
   font-size: 12px;
   min-width: 100%;
 }
+
 .shift-grid th,
 .shift-grid td {
   border: 1px solid var(--line);
@@ -666,6 +629,7 @@ function goPrint() {
   min-width: 44px;
   white-space: nowrap;
 }
+
 .shift-grid th {
   background: var(--panel-strip);
   color: var(--ink-2);
@@ -674,6 +638,7 @@ function goPrint() {
   top: 0;
   z-index: 1;
 }
+
 .shift-grid td.fixed,
 .shift-grid th.fixed {
   position: sticky;
@@ -685,47 +650,57 @@ function goPrint() {
   white-space: nowrap;
   font-weight: 600;
 }
+
 .shift-grid td.fixed small {
   color: var(--ink-3);
   font-weight: 500;
 }
+
 .shift-grid th.fixed {
   background: var(--panel-strip);
   z-index: 3;
 }
+
 .shift-grid td.cell-editable {
   cursor: pointer;
   color: var(--ink);
 }
+
 .shift-grid td.is-empty {
   color: var(--line-2);
 }
+
 .shift-grid td.cell-editable:hover {
   outline: 2px solid var(--indigo);
   outline-offset: -2px;
 }
+
 /* 時間帯バンド: 割当の区分を淡い機能色で塗る（左に太めの色帯） */
 .shift-grid td.band-morning {
   background: var(--morning-bg);
   color: var(--morning-ink);
   box-shadow: inset 3px 0 0 var(--morning);
 }
+
 .shift-grid td.band-evening {
   background: var(--evening-bg);
   color: var(--evening-ink);
   box-shadow: inset 3px 0 0 var(--evening);
 }
+
 .shift-grid td.band-night {
   background: var(--night-bg);
   color: var(--night-ink);
   box-shadow: inset 3px 0 0 var(--night);
 }
+
 .shift-grid td.cell-paid-leave {
   background: var(--warn-bg);
   color: var(--warn);
   font-weight: 700;
   box-shadow: inset 3px 0 0 var(--warn);
 }
+
 .shortfall-list {
   max-height: 120px;
   overflow: auto;
@@ -734,14 +709,17 @@ function goPrint() {
   gap: 4px 12px;
   font-size: 12px;
 }
+
 .shortfall-item {
   white-space: nowrap;
 }
+
 .shortfall-note {
   margin: 8px 0 0;
   font-size: 11px;
   color: var(--ink-3);
 }
+
 .gen-warning-list {
   margin: 0;
   padding-left: 18px;
@@ -750,6 +728,7 @@ function goPrint() {
   font-size: 13px;
   line-height: 1.6;
 }
+
 .legend {
   margin: 12px 2px 0;
   font-size: 12px;
@@ -759,37 +738,45 @@ function goPrint() {
   gap: 14px;
   flex-wrap: wrap;
 }
+
 .legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+
 .legend .sw {
   width: 13px;
   height: 13px;
   border-radius: 3px;
   border: 1px solid var(--line-2);
 }
+
 .legend .sw.band-morning {
   background: var(--morning-bg);
   box-shadow: inset 3px 0 0 var(--morning);
 }
+
 .legend .sw.band-evening {
   background: var(--evening-bg);
   box-shadow: inset 3px 0 0 var(--evening);
 }
+
 .legend .sw.band-night {
   background: var(--night-bg);
   box-shadow: inset 3px 0 0 var(--night);
 }
+
 .legend .sw--mismatch {
   background: var(--danger-bg);
   box-shadow: inset 3px 0 0 var(--danger);
 }
+
 .legend .sw--leave {
   background: var(--warn-bg);
   box-shadow: inset 3px 0 0 var(--warn);
 }
+
 .legend-sep {
   width: 1px;
   height: 14px;
