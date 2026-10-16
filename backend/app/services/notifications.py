@@ -23,6 +23,7 @@ def _next_month(d: date) -> tuple[int, int]:
 # 26日に近くなったら来月のシフトができているかDBに問い合わせる。
 # まだなら通知を出す。
 def build_notifications(db: Session, today: date) -> list[Notification]:
+    """ダッシュボードに出す通知一覧を組み立てる（締切リマインドや未作成シフト等）。"""
     result: list[Notification] = []
 
     if today.day >= REMIND_DAY:

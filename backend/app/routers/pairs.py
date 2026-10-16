@@ -29,6 +29,7 @@ def _pair_exists(db: Session, a_id: int, b_id: int) -> bool:
 # GETメソッドできたら、下の関数を実行。response_model が返す型の定義（app.schemas.pair）。
 @router.get("", response_model=list[PairConstraintRead])
 def list_pairs(_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
+    """NGペア（同時勤務させない従業員の組）一覧を返す。"""
     return list(db.execute(select(EmployeePairConstraint)).scalars())
 
 
@@ -38,6 +39,7 @@ def create_pair(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """NGペアを登録する（両従業員の実在と重複を確認。管理者のみ）。"""
     # 両方の従業員が実在するか確認（存在しないIDでの登録を防ぐ）
     for emp_id in (payload.employee_a_id, payload.employee_b_id):
         if db.get(Employee, emp_id) is None:
@@ -68,6 +70,7 @@ def delete_pair(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """NGペアを削除する（管理者のみ）。"""
     row = db.get(EmployeePairConstraint, pair_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pair not found")

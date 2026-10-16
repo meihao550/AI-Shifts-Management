@@ -83,6 +83,11 @@ def calculate_payroll(
     paid_leave_records: Iterable[tuple[int, date]] | None = None,
     rest_by_code: dict[str, int] | None = None,
 ) -> PayrollReport:
+    """当月のシフト割当から人件費レポートを算出する。
+
+    従業員ごとに実働時間・深夜割増・交通費・有給を集計し、保険区分の月間時間制約の
+    状況も付す。休憩は現在のパターン(rest_by_code)を優先（ADR 0001）。
+    """
     # 休憩は「現在のパターン」を優先し、該当パターンが無ければ割当のスナップショットを使う。
     # これで再計算のたびに最新のパターン休憩が反映される（ADR 0001）。
     rest_by_code = rest_by_code or {}

@@ -63,6 +63,7 @@ def _persist_or_update_user(db: Session, info: dict) -> User | None:
 
 @router.get("/google/login")
 def google_login():
+    """Google OAuth の認可画面へリダイレクトする（ログイン開始）。"""
     if not settings.google_client_id:
         raise HTTPException(status_code=500, detail="GOOGLE_CLIENT_ID is not configured")
     url, _state = build_authorize_url()
@@ -74,6 +75,7 @@ async def google_callback(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """Google OAuth コールバック。トークン交換→ユーザー検証→JWT発行し、フロントへ戻す。"""
     code = request.query_params.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="missing authorization code")
@@ -118,4 +120,5 @@ def dev_login(db: Annotated[Session, Depends(get_db)]):
 
 @router.get("/me", response_model=MeResponse)
 def me(user: CurrentUser) -> MeResponse:
+    """ログイン中ユーザーの情報（権限・従業員紐付け含む）を返す。"""
     return MeResponse.model_validate(user)

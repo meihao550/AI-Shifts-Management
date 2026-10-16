@@ -17,6 +17,7 @@ router = APIRouter(prefix="/allowed-logins", tags=["allowed-logins"])
 
 @router.get("", response_model=list[AllowedLoginRead])
 def list_allowed(_admin: AdminUser, db: Annotated[Session, Depends(get_db)]):
+    """ログイン許可リスト一覧を返す（管理者のみ）。"""
     return list(db.execute(select(AllowedLogin).order_by(AllowedLogin.id)).scalars())
 
 
@@ -26,6 +27,7 @@ def create_allowed(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """ログイン許可(email・権限・従業員紐付け)を1件追加する（重複/実在チェック。管理者のみ）。"""
     email = payload.email.lower()
     existing = db.execute(
         select(AllowedLogin).where(func.lower(AllowedLogin.email) == email)
@@ -53,6 +55,7 @@ def delete_allowed(
     _admin: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ):
+    """ログイン許可を1件削除する（管理者のみ）。"""
     row = db.get(AllowedLogin, allowed_id)
     if not row:
         raise HTTPException(status_code=404, detail="not found")

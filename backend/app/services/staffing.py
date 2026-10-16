@@ -103,9 +103,11 @@ def default_patterns() -> list[dict]:
 # （10-17 や 18-1 など。掛け持ち従業員のみ配置可）を使わざるを得なくなり、
 # 過剰配置なし(==維持)のまま Wワークの人が繁忙帯に入る（方針B: ピーク運用）。
 def default_hourly_rules() -> list[dict]:
+    """時間別必要人数(平日/休日 × 各時)のデフォルト定義を返す（初回seedで使用）。"""
     rules: list[dict] = []
 
     def add(day_category: DayCategory, hours: range, required: int) -> None:
+        """指定した時間レンジ(hours)に必要人数 required の行をまとめて追加する。"""
         for h in hours:
             rules.append(
                 {"day_category": day_category, "hour": h, "required": required}

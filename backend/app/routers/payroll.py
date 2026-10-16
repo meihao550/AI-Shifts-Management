@@ -25,6 +25,7 @@ def get_payroll(
     year: int = Query(...),
     month: int = Query(..., ge=1, le=12),
 ):
+    """指定した年月の人件費レポートを返す（シフトが無ければ404）。"""
     shift = db.execute(
         select(Shift)
         .options(selectinload(Shift.assignments))
