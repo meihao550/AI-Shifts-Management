@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { navItems } from '@/config/nav'
 import { maskIconStyle } from '@/utils/icon'
+import StarIcon from '@/components/StarIcon.vue'
 
 const auth = useAuthStore()
 const themeStore = useThemeStore()
@@ -24,15 +25,7 @@ const tiles = computed(() => navItems.filter((t) => !t.adminOnly || auth.isAdmin
     <button type="button" class="tile tile--button" @click="themeStore.toggle()">
       <span class="tile__box">
         <span class="tile__icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-              :fill="themeStore.isDark ? 'currentColor' : 'none'"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <StarIcon :size="40" :filled="themeStore.isDark" />
         </span>
       </span>
       <span class="tile__label">{{ themeStore.isDark ? '明るくする' : '暗くする' }}</span>

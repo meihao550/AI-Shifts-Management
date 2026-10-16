@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { navItems } from '@/config/nav'
 import { maskIconStyle } from '@/utils/icon'
+import StarIcon from '@/components/StarIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -121,15 +122,7 @@ function doLogout() {
         <div class="menu-divider"></div>
         <button type="button" class="menu-item theme-toggle" @click="themeStore.toggle()">
           <span class="menu-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path
-                d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                :fill="themeStore.isDark ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-              />
-            </svg>
+            <StarIcon :filled="themeStore.isDark" />
           </span>
           <span class="menu-label">{{ themeStore.isDark ? '画面を明るくする' : '画面を暗くする' }}</span>
         </button>
