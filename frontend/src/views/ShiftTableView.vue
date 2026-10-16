@@ -24,6 +24,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 import { isoDate } from '@/utils/date'
+import { dayCategory, weekdayColor } from '@/utils/weekday'
 
 // セル編集で「有給」を表すための特別な選択値
 const PAID_LEAVE_VALUE = '__paid_leave__'
@@ -187,10 +188,9 @@ function cellAt(employeeId: number, date: Date): AssignmentCell {
 }
 
 function cellStyle(date: Date) {
-  const w = date.getDay()
-  if (w === 0) return { color: '#c92a2a' }
-  if (w === 6) return { color: '#1971c2' }
-  return {}
+  // 土日のみ色付け（平日は色指定なし＝既定テキスト色を継承）。
+  const c = weekdayColor(date)
+  return c ? { color: c } : {}
 }
 
 // ---- 人数不足リマインド（時間カバレッジ方式） ------------------------------
@@ -217,7 +217,7 @@ const shortfalls = computed<Shortfall[]>(() => {
   if (!shift.value) return out
   for (const d of days.value) {
     const iso = isoDate(d)
-    const dayCategory = d.getDay() === 0 || d.getDay() === 6 ? 'weekend_or_holiday' : 'weekday'
+    const dayCat = dayCategory(d)
     // その日の各拡張時のカバレッジを集計
     const cover: Record<number, number> = {}
     for (const a of draft.value) {
@@ -225,7 +225,7 @@ const shortfalls = computed<Shortfall[]>(() => {
       for (const h of assignmentHours(a)) cover[h] = (cover[h] ?? 0) + 1
     }
     for (const r of ruleStore.hourlyStaffing) {
-      if (r.day_category !== dayCategory || r.required <= 0) continue
+      if (r.day_category !== dayCat || r.required <= 0) continue
       const have = cover[r.hour] ?? 0
       if (have < r.required) out.push({ day: d.getDate(), hour: r.hour, have, need: r.required })
     }
