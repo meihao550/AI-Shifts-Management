@@ -87,6 +87,13 @@
 - `utils/weekday.ts` … `weekdayColor(d)`（日=赤/土=青）、`dayCategory(d)`（平日/休日）。
 - `utils/icon.ts` … `maskIconStyle(url)`＝マスク画像を currentColor で塗る style。
 - `config/nav.ts` … ナビ項目 `navItems`（ヘッダー・ホームで共有）。
+- `constants/availability.ts` … 希望種別ラベル `KIND_LABELS`（カレンダーと composable で共有）。
+
+### composables（画面から分離した再利用ロジック）※SOLIDリファクタで新設
+- `useShiftGrid.ts` … シフト表セルの表示(ラベル/時間帯バンド/有給)を計算し `cellAt`/`cellStyle` を返す。
+- `useShortfalls.ts` … 人数不足(Shortfall)の算出。
+- `useShiftGeneration.ts` … 生成(LLM＋ソルバー)の実行と入力状態・警告。
+- `useAvailabilities.ts` … 希望のロード/追加/削除と「今後の同じ曜日へ一括適用」。
 
 ### 画面（views）
 - `HomeView.vue` … スマホのホーム（ランチャータイル＋星トグル）。

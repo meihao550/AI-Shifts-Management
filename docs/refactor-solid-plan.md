@@ -6,16 +6,14 @@
 
 > usage 節約のため、**この計画は新しいセッションで** 実行すること（巨大な会話履歴を引き継がない）。1ステップずつ、検証→コミットで進める。
 
-## 進捗
-- [x] **1. LLMプロバイダの戦略パターン化**（`app/services/llm.py`。`LlmProvider`/`resolve_provider`）… 完了・検証済み。
-- [x] **2. シフト生成のドメイン処理をサービスへ**（`app/services/shift_generation.py`、ルーターは委譲）… 完了・検証済み。
-- [ ] 3. `scheduler.py` の責務分割（lookups/constraints/objective）… **未着手（最注意・新セッション推奨）**。
-- [ ] 4. `ShiftTableView.vue` の composable/子コンポーネント化 … 未着手。
-- [ ] 5. `AvailabilityCalendar.vue` の CRUD を composable 化 … 未着手。
+## 進捗（すべて完了・検証済み）
+- [x] **1. LLMプロバイダの戦略パターン化**（`app/services/llm.py`。`LlmProvider`/`resolve_provider`）
+- [x] **2. シフト生成のドメイン処理をサービスへ**（`app/services/shift_generation.py`、ルーターは委譲）
+- [x] **3. `scheduler.py` の責務分割**（`_solve_once` を変数/各制約/採用警告/目的関数/結果抽出の専用メソッドに分割。22テスト緑）
+- [x] **4. `ShiftTableView.vue` の composable 化**（`useShiftGrid`/`useShortfalls`/`useShiftGeneration`。785→663行）
+- [x] **5. `AvailabilityCalendar.vue` の CRUD を composable 化**（`useAvailabilities`＋`constants/availability`。521→410行）
 
-> 3〜5 は差分が大きくトークン消費も大きいため、**新しいセッション**でこのファイルを起点に続ける。
-
-## 対象と優先度（上から着手）
+## 対象と優先度（上から着手）※以下は当初計画の記録
 
 ### 1. backend: LLM プロバイダを戦略パターンに（OCP/DIP・低リスク・まず着手）
 - 現状: `app/services/llm.py` の `derive_constraints_from_text` が `if provider == ...` の分岐で anthropic/openai/deepseek を直書き（新プロバイダ追加＝関数修正＝OCP違反）。
