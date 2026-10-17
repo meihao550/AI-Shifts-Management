@@ -555,44 +555,17 @@ class ShiftScheduler:
         #             if not p.is_basic:
         #                 dual_wwork_bonus_terms.append(x[(e.id, d, p.id)])
 
-        # Objective: minimize deviation from monthly target and reward preferences.
-        # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
-        # 分配が縮退して一部の従業員が 0 枠になるため、最大負荷と最小負荷の差を縮める。
-        balance = 0
-        if loads:
-            max_load = model.NewIntVar(0, len(days), "max_load")
-            min_load = model.NewIntVar(0, len(days), "min_load")
-            for load_e in loads:
-                model.Add(load_e <= max_load)
-                model.Add(load_e >= min_load)
-            balance = max_load - min_load
-
-        obj = 0
-        if penalties:
-            obj += sum(penalties)
-        if bonus_terms:
-            obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
-        # 廃止(ADR-0002): メインシフト寄せボーナスは objective から除外。
-        # if main_shift_bonus_terms:
-        #     obj -= MAIN_SHIFT_WEIGHT * sum(main_shift_bonus_terms)
-        # 廃止(ADR-0004): Wワーク寄せボーナスは objective から除外。
-        # if dual_wwork_bonus_terms:
-        #     obj -= DUAL_WWORK_WEIGHT * sum(dual_wwork_bonus_terms)
-        if loads:
-            obj += BALANCE_WEIGHT * balance
-        if shortage_terms:
-            # 不足は他のどの目的より優先して潰す（十分大きな重み）。
-            obj += COVERAGE_SLACK_WEIGHT * sum(shortage_terms)
-        if surplus_terms:
-            # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
-            obj += SURPLUS_WEIGHT * sum(surplus_terms)
-        if insurance_under_terms:
-            # 保険区分の下限に対する不足(分)を弱く嫌う（下限がソフトの段のみ）。
-            obj += INSURANCE_UNDER_WEIGHT * sum(insurance_under_terms)
-        if mandatory_unmet_terms:
-            # 確定出勤の未達は強く嫌う（不足の次に優先。診断段のみ）。
-            obj += MANDATORY_WEIGHT * sum(mandatory_unmet_terms)
-        model.Minimize(obj)
+        self._build_objective(
+            model,
+            days=days,
+            penalties=penalties,
+            bonus_terms=bonus_terms,
+            loads=loads,
+            shortage_terms=shortage_terms,
+            surplus_terms=surplus_terms,
+            insurance_under_terms=insurance_under_terms,
+            mandatory_unmet_terms=mandatory_unmet_terms,
+        )
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.max_solve_seconds
@@ -601,6 +574,35 @@ class ShiftScheduler:
         status = solver.Solve(model)
         elapsed = _time.time() - started
 
+        return self._extract_result(
+            solver=solver,
+            status=status,
+            elapsed=elapsed,
+            x=x,
+            emps=emps,
+            days=days,
+            pats=pats,
+            use_slack=use_slack,
+            slack_vars=slack_vars,
+            mandatory=mandatory,
+            warnings=warnings,
+        )
+
+    def _extract_result(
+        self,
+        solver: cp_model.CpSolver,
+        status: int,
+        elapsed: float,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        emps: list[EmployeeSpec],
+        days: list[date],
+        pats: list[PatternSpec],
+        use_slack: bool,
+        slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]],
+        mandatory: dict[tuple[int, date], frozenset[str]],
+        warnings: list[str],
+    ) -> SchedulerResult:
+        """ソルバーの解から割当リストを取り出し、未達(確定出勤/保険下限)の警告を付けて返す。"""
         status_str = solver.StatusName(status)
         assignments: list[dict[str, Any]] = []
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -671,6 +673,57 @@ class ShiftScheduler:
             solver_seconds=round(elapsed, 3),
             warnings=warnings,
         )
+
+    def _build_objective(
+        self,
+        model: cp_model.CpModel,
+        days: list[date],
+        penalties: list[cp_model.IntVar],
+        bonus_terms: list[Any],
+        loads: list[Any],
+        shortage_terms: list[cp_model.IntVar],
+        surplus_terms: list[cp_model.IntVar],
+        insurance_under_terms: list[cp_model.IntVar],
+        mandatory_unmet_terms: list[cp_model.IntVar],
+    ) -> None:
+        """目的関数を組み立てて model に設定する。
+
+        週回数偏差(penalties)＋平準化(balance, S-6)を最小化し、希望(preference)は加点。
+        不足(shortage)は最優先で潰し、過剰(surplus)/保険下限不足/確定出勤未達はそれぞれの
+        重みでソフトに嫌う(ADR-0005)。（ADR-0002/0004 で廃止したメイン区分/Wワーク寄せ
+        ボーナスは objective から除外済み）
+        """
+        # Fairness (S-6): 勤務回数を平準化する。供給 < 需要のとき目標偏差だけでは
+        # 分配が縮退して一部の従業員が 0 枠になるため、最大負荷と最小負荷の差を縮める。
+        balance = 0
+        if loads:
+            max_load = model.NewIntVar(0, len(days), "max_load")
+            min_load = model.NewIntVar(0, len(days), "min_load")
+            for load_e in loads:
+                model.Add(load_e <= max_load)
+                model.Add(load_e >= min_load)
+            balance = max_load - min_load
+
+        obj = 0
+        if penalties:
+            obj += sum(penalties)
+        if bonus_terms:
+            obj -= PREFERENCE_WEIGHT * sum(bonus_terms)
+        if loads:
+            obj += BALANCE_WEIGHT * balance
+        if shortage_terms:
+            # 不足は他のどの目的より優先して潰す（十分大きな重み）。
+            obj += COVERAGE_SLACK_WEIGHT * sum(shortage_terms)
+        if surplus_terms:
+            # 過剰(最大α)は弱く嫌う。誰かを働かせられる時だけ +α を使い、無駄な過剰は出さない。
+            obj += SURPLUS_WEIGHT * sum(surplus_terms)
+        if insurance_under_terms:
+            # 保険区分の下限に対する不足(分)を弱く嫌う（下限がソフトの段のみ）。
+            obj += INSURANCE_UNDER_WEIGHT * sum(insurance_under_terms)
+        if mandatory_unmet_terms:
+            # 確定出勤の未達は強く嫌う（不足の次に優先。診断段のみ）。
+            obj += MANDATORY_WEIGHT * sum(mandatory_unmet_terms)
+        model.Minimize(obj)
 
     @staticmethod
     def _slack_warnings(
