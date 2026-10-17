@@ -1,3 +1,4 @@
+// ログイン許可リスト(allowed_logins)ストア。一覧取得・追加・削除を扱う。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { AllowedLogin, UserRole } from '@/types'

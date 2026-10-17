@@ -18,6 +18,7 @@ def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
+    """Bearer トークンを検証し、対応するユーザーを返す（無効・不在なら401）。"""
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,6 +45,7 @@ def get_current_user(
 
 
 def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
+    """管理者のみ許可する依存性（非管理者は403）。"""
     if user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     return user

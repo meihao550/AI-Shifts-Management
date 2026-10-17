@@ -16,6 +16,8 @@ import { useRuleStore } from '@/stores/rule'
 import type { Availability, AvailabilityKind } from '@/types'
 import { isoDate } from '@/utils/date'
 import { weekdayColor } from '@/utils/weekday'
+import { useAvailabilities } from '@/composables/useAvailabilities'
+import { KIND_LABELS as kindLabels } from '@/constants/availability'
 
 // employeeId を渡すと従業員を固定（従業員セレクトを隠す）。従業員管理のカレンダーで使う。
 const props = defineProps<{ year: number; month: number; employeeId?: number }>()
@@ -35,19 +37,6 @@ function patternLabel(code: string): string {
 
 const lockEmployee = computed(() => props.employeeId != null)
 const selectedEmployeeId = ref<number | null>(props.employeeId ?? null)
-const availabilities = ref<Availability[]>([])
-const loading = ref(false)
-
-// Googleカレンダー風：日付に登録した直後、「他の同じ曜日にも適用しますか？」と尋ねる。
-// 曜日は JS の getDay()（0=日..6=土）。
-const weekdayNames = ['日', '月', '火', '水', '木', '金', '土']
-const showApplyPrompt = ref(false)
-const pendingApply = ref<{
-  weekday: number
-  kind: AvailabilityKind
-  note: string | null
-  baseIso: string
-} | null>(null)
 
 // 日付クリックで開くモーダルの状態
 const showModal = ref(false)
@@ -79,22 +68,24 @@ const days = computed(() => {
 
 const firstWeekday = computed(() => new Date(props.year, props.month - 1, 1).getDay())
 
-async function refresh() {
-  if (!selectedEmployeeId.value) {
-    availabilities.value = []
-    return
-  }
-  loading.value = true
-  try {
-    const rows = await employeeStore.listAvailabilities(selectedEmployeeId.value)
-    availabilities.value = rows.filter((r) => {
-      const d = new Date(r.target_date)
-      return d.getFullYear() === props.year && d.getMonth() + 1 === props.month
-    })
-  } finally {
-    loading.value = false
-  }
-}
+// 希望のロード/追加/削除・曜日一括適用は composable に分離（SRP）。
+const {
+  availabilities,
+  loading,
+  refresh,
+  add,
+  remove,
+  showApplyPrompt,
+  pendingApply,
+  weekdayNames,
+  promptSameWeekday,
+  confirmApplyWeekday,
+} = useAvailabilities({
+  year: () => props.year,
+  month: () => props.month,
+  selectedEmployeeId,
+  days,
+})
 
 watch(selectedEmployeeId, refresh)
 watch(() => [props.year, props.month], refresh)
@@ -119,29 +110,6 @@ onMounted(async () => {
 function itemsOn(d: Date): Availability[] {
   const iso = isoDate(d)
   return availabilities.value.filter((a) => a.target_date === iso)
-}
-
-async function add(
-  kind: AvailabilityKind,
-  d: Date,
-  note: string | null = null,
-): Promise<Availability | null> {
-  if (!selectedEmployeeId.value) return null
-  try {
-    const created = await employeeStore.createAvailability({
-      employee_id: selectedEmployeeId.value,
-      target_date: isoDate(d),
-      kind,
-      shift_type: null,
-      note,
-    })
-    availabilities.value.push(created)
-    message.success(`${isoDate(d)} を ${kindLabels[kind]} に追加しました`)
-    return created
-  } catch (e) {
-    message.error(`登録失敗: ${(e as Error).message}`)
-    return null
-  }
 }
 
 // 日付セルのクリックでモーダルを開く（入力状態はリセット）
@@ -183,71 +151,6 @@ async function confirmAdd() {
   if (created) promptSameWeekday(baseDate, kind, note)
 }
 
-async function remove(id: number) {
-  try {
-    await employeeStore.deleteAvailability(id)
-    availabilities.value = availabilities.value.filter((a) => a.id !== id)
-  } catch (e) {
-    message.error(`削除失敗: ${(e as Error).message}`)
-  }
-}
-
-// 配置に関わる種別（曜日一括で置き換える対象）。有給は個別管理なので残す。
-const SCHEDULING_KINDS = new Set<AvailabilityKind>(['unavailable', 'preferred', 'mandatory'])
-
-// 登録直後に、同じ曜日の「今後の日」にも同じ内容を適用するか尋ねる。
-// 基準日より後の同じ曜日が当月に無ければ（例: 月末）聞かない。
-function promptSameWeekday(baseDate: Date, kind: AvailabilityKind, note: string | null) {
-  const weekday = baseDate.getDay()
-  const baseIso = isoDate(baseDate)
-  const upcoming = days.value.filter((d) => d.getDay() === weekday && isoDate(d) > baseIso)
-  if (!upcoming.length) return
-  pendingApply.value = { weekday, kind, note, baseIso }
-  showApplyPrompt.value = true
-}
-
-// 「はい」。当月の同じ曜日のうち、基準日より後の日に同じ内容を適用する。
-async function confirmApplyWeekday() {
-  const p = pendingApply.value
-  showApplyPrompt.value = false
-  if (!p || !selectedEmployeeId.value) return
-  const targets = days.value.filter(
-    (d) => d.getDay() === p.weekday && isoDate(d) > p.baseIso,
-  )
-  try {
-    for (const d of targets) {
-      const iso = isoDate(d)
-      if (SCHEDULING_KINDS.has(p.kind)) {
-        // 配置系(休日/希望日/確定出勤)は1日1つ。既存を置き換えてから登録する。
-        const existing = availabilities.value.filter(
-          (a) => a.target_date === iso && SCHEDULING_KINDS.has(a.kind),
-        )
-        for (const a of existing) {
-          await employeeStore.deleteAvailability(a.id)
-          availabilities.value = availabilities.value.filter((x) => x.id !== a.id)
-        }
-      } else if (availabilities.value.some((a) => a.target_date === iso && a.kind === p.kind)) {
-        continue // 有給など: 既に同じ種別があればスキップ
-      }
-      const created = await employeeStore.createAvailability({
-        employee_id: selectedEmployeeId.value,
-        target_date: iso,
-        kind: p.kind,
-        shift_type: null,
-        note: p.note,
-      })
-      availabilities.value.push(created)
-    }
-    message.success(
-      `今後の${weekdayNames[p.weekday]}曜日にも「${kindLabels[p.kind]}」を登録しました`,
-    )
-  } catch (e) {
-    message.error(`一括登録失敗: ${(e as Error).message}`)
-  } finally {
-    pendingApply.value = null
-  }
-}
-
 function dayClass(d: Date) {
   const items = itemsOn(d)
   if (items.some((i) => i.kind === 'paid_leave')) return 'day day--paid-leave'
@@ -255,13 +158,6 @@ function dayClass(d: Date) {
   if (items.some((i) => i.kind === 'mandatory')) return 'day day--mandatory'
   if (items.some((i) => i.kind === 'preferred')) return 'day day--preferred'
   return 'day'
-}
-
-const kindLabels: Record<AvailabilityKind, string> = {
-  unavailable: '休日',
-  preferred: '希望日',
-  mandatory: '確定出勤',
-  paid_leave: '有給',
 }
 
 // 登録タグの補足表示。確定出勤の note はパターンコードなので表示名に変換する。
