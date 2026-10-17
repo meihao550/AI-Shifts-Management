@@ -1,3 +1,4 @@
+// アプリのエントリポイント。Vue アプリを生成し Pinia / Router を登録してマウントする。
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import naive from 'naive-ui'

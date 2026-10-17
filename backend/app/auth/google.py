@@ -15,6 +15,7 @@ USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 def build_authorize_url(state: str | None = None) -> tuple[str, str]:
+    """Google OAuth の認可URLと CSRF 用 state を生成して返す。"""
     state = state or secrets.token_urlsafe(24)
     params = {
         "client_id": settings.google_client_id,
@@ -31,6 +32,7 @@ def build_authorize_url(state: str | None = None) -> tuple[str, str]:
 
 
 async def exchange_code(code: str) -> dict:
+    """認可コードをアクセストークン等に交換する。"""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             TOKEN_URL,
@@ -47,6 +49,7 @@ async def exchange_code(code: str) -> dict:
 
 
 async def fetch_userinfo(access_token: str) -> dict:
+    """アクセストークンでユーザー情報(email・name等)を取得する。"""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             USERINFO_URL,

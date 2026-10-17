@@ -44,9 +44,11 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
+        """本番環境かどうか（ENVIRONMENT == production）。"""
         return self.environment == "production"
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """設定(Settings)を環境変数/.env から読み込んで返す（lru_cache で単一化）。"""
     return Settings()

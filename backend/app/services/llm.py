@@ -54,7 +54,9 @@ SYSTEM_PROMPT = """あなたはシフトスケジューリングの制約抽出�
 class LlmProvider(Protocol):
     """1回の LLM 呼び出し戦略。system/user プロンプトを渡し、生の応答テキストを返す。"""
 
-    async def complete(self, system: str, user: str) -> str: ...
+    async def complete(self, system: str, user: str) -> str:
+        """system/user プロンプトを LLM に送り、生の応答テキストを返す。"""
+        ...
 
 
 class AnthropicProvider:
