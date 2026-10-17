@@ -24,7 +24,9 @@ import { useAuthStore } from '@/stores/auth'
 import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 import { isoDate } from '@/utils/date'
-import { dayCategory, weekdayColor } from '@/utils/weekday'
+import { useShiftGrid } from '@/composables/useShiftGrid'
+import { useShortfalls } from '@/composables/useShortfalls'
+import { useShiftGeneration } from '@/composables/useShiftGeneration'
 
 // セル編集で「有給」を表すための特別な選択値
 const PAID_LEAVE_VALUE = '__paid_leave__'
@@ -40,8 +42,6 @@ const message = useMessage()
 const today = new Date()
 const year = ref(today.getFullYear())
 const month = ref(today.getMonth() + 1)
-const naturalNote = ref('')
-const useLLM = ref(true)
 const availDialog = ref(false)
 
 const availabilityForm = ref<{
@@ -53,10 +53,6 @@ const availabilityForm = ref<{
 }>({ employee_id: null, target_date: '', kind: 'unavailable', shift_type: null, note: null })
 
 const loading = ref(false)
-
-// 直近の生成で返ってきた警告（人数不足・週回数を満たせない等）。トーストで一瞬出すのではなく
-// シフト表の上に出し続ける。生成のたびに更新し、別の月を読み込んだらクリアする。
-const genWarnings = ref<string[]>([])
 
 // 手動編集用のドラフト（保存されるまではこちらを表示・編集する）
 const draft = ref<ShiftAssignment[]>([])
@@ -77,6 +73,14 @@ function paidLeaveFor(employeeId: number, iso: string): Availability | undefined
     (a) => a.employee_id === employeeId && a.target_date === iso,
   )
 }
+
+// 生成(LLM＋ソルバー)まわり（useLLM/メモ/警告/generate）は composable に分離（SRP）。
+const { genWarnings, useLLM, naturalNote, generate } = useShiftGeneration({
+  year,
+  month,
+  loading,
+  afterGenerate: loadPaidLeave,
+})
 
 // store のシフトが変わったらドラフトを作り直す
 watch(
@@ -118,119 +122,22 @@ const patternOptions = computed(() =>
   ruleStore.patterns.map((p) => ({ label: p.label, value: p.code })),
 )
 
-// メインシフト区分ラベル(shiftTypeLabel)は廃止(ADR-0002)に伴い削除。
-
-// "HH:MM:SS" → "H"（ちょうどの時刻）/ "H:MM"（分あり）。内部は HH:MM のまま保持し表示のみ簡略化。
-function hourLabel(t: string): string {
-  const [hh, mm] = t.split(':')
-  const hour = parseInt(hh, 10)
-  return mm === '00' ? `${hour}` : `${hour}:${mm}`
-}
-
-// 割当を実時間帯で表示する（例 20:00-00:00 → "20 - 0"）。深夜跨ぎもそのまま表示。
-// 休憩・実働はここには出さない（人件費画面で確認する）。
-function timeRange(a: ShiftAssignment): string {
-  return `${hourLabel(a.start_time)} - ${hourLabel(a.end_time)}`
-}
-
-type Band = 'morning' | 'evening' | 'night' | null
-
-interface AssignmentCell {
-  label: string
-  paidLeave: boolean
-  band: Band // 時間帯の機能色（先頭割当の区分）
-}
-
-// 割当の shift_type にはパターンの code が入る。メイン照合は区分(category)でも
-// 一致とみなす（scheduler.py と同じく code / category の二本立て）。
-function categoryOfCode(shiftCode: string | null): string | null {
-  if (!shiftCode) return null
-  return ruleStore.patterns.find((p) => p.code === shiftCode)?.category ?? null
-}
-
-function assignmentsFor(employeeId: number, date: Date): AssignmentCell {
-  if (!shift.value) return { label: '', paidLeave: false, band: null }
-  const iso = isoDate(date)
-
-  // 有給日はシフトより優先して「有給」と表示する
-  if (paidLeaveFor(employeeId, iso)) {
-    return { label: '有給', paidLeave: true, band: null }
-  }
-
-  const matches = draft.value.filter(
-    (a) => a.employee_id === employeeId && a.target_date === iso,
-  )
-  if (matches.length === 0) return { label: '', paidLeave: false, band: null }
-
-  const cat = categoryOfCode(matches[0].shift_type)
-  const band: Band =
-    cat === 'morning' || cat === 'evening' || cat === 'night' ? cat : null
-  return {
-    label: matches.map((a) => timeRange(a)).join(', '),
-    paidLeave: false,
-    band,
-  }
-}
-
-// 各セルの表示値を1描画1回だけ計算してマップ化（区分色・ラベル等）。
-const EMPTY_CELL: AssignmentCell = { label: '', paidLeave: false, band: null }
-const cellMap = computed(() => {
-  const m = new Map<string, AssignmentCell>()
-  for (const emp of employeeStore.employees) {
-    for (const d of days.value) {
-      m.set(`${emp.id}|${isoDate(d)}`, assignmentsFor(emp.id, d))
-    }
-  }
-  return m
+// セル表示（ラベル・時間帯バンド・有給）の計算は composable に分離（SRP）。
+const { cellAt, cellStyle } = useShiftGrid({
+  shift,
+  days,
+  draft,
+  employees: () => employeeStore.employees,
+  patterns: () => ruleStore.patterns,
+  paidLeaveFor,
 })
-function cellAt(employeeId: number, date: Date): AssignmentCell {
-  return cellMap.value.get(`${employeeId}|${isoDate(date)}`) ?? EMPTY_CELL
-}
 
-function cellStyle(date: Date) {
-  // 土日のみ色付け（平日は色指定なし＝既定テキスト色を継承）。
-  const c = weekdayColor(date)
-  return c ? { color: c } : {}
-}
-
-// ---- 人数不足リマインド（時間カバレッジ方式） ------------------------------
-// 割当がカバーする「拡張時」を返す（深夜跨ぎは 24=0:00, 25=1:00）。
-function assignmentHours(a: ShiftAssignment): number[] {
-  const s = parseInt(a.start_time.slice(0, 2), 10)
-  let e = parseInt(a.end_time.slice(0, 2), 10)
-  if (e <= s) e += 24 // 深夜跨ぎ
-  const hours: number[] = []
-  for (let h = s; h < e; h++) hours.push(h)
-  return hours
-}
-
-interface Shortfall {
-  day: number
-  hour: number
-  have: number
-  need: number
-}
-
-// 各日・各時間の配置人数が必要人数に足りているか（土日は weekend 扱い。祝日は未考慮）
-const shortfalls = computed<Shortfall[]>(() => {
-  const out: Shortfall[] = []
-  if (!shift.value) return out
-  for (const d of days.value) {
-    const iso = isoDate(d)
-    const dayCat = dayCategory(d)
-    // その日の各拡張時のカバレッジを集計
-    const cover: Record<number, number> = {}
-    for (const a of draft.value) {
-      if (a.target_date !== iso) continue
-      for (const h of assignmentHours(a)) cover[h] = (cover[h] ?? 0) + 1
-    }
-    for (const r of ruleStore.hourlyStaffing) {
-      if (r.day_category !== dayCat || r.required <= 0) continue
-      const have = cover[r.hour] ?? 0
-      if (have < r.required) out.push({ day: d.getDate(), hour: r.hour, have, need: r.required })
-    }
-  }
-  return out
+// 人数不足(Shortfall)の算出も composable に分離（SRP）。
+const shortfalls = useShortfalls({
+  shift,
+  days,
+  draft,
+  hourlyStaffing: () => ruleStore.hourlyStaffing,
 })
 
 // ---- セル編集 --------------------------------------------------------------
@@ -346,29 +253,6 @@ async function loadShift() {
   loading.value = true
   try {
     await Promise.all([shiftStore.fetch(year.value, month.value), loadPaidLeave()])
-  } finally {
-    loading.value = false
-  }
-}
-
-async function generate() {
-  loading.value = true
-  try {
-    const res = await shiftStore.generate({
-      year: year.value,
-      month: month.value,
-      natural_language_note: naturalNote.value,
-      use_llm: useLLM.value,
-    })
-    await loadPaidLeave()
-    genWarnings.value = res.warnings
-    if (res.warnings.length) {
-      message.warning(`シフトを生成しました（注意 ${res.warnings.length} 件。表の上に表示中）`)
-    } else {
-      message.success(`シフトを生成しました (${res.solver_seconds}s / ${res.solver_status})`)
-    }
-  } catch (e) {
-    message.error(`生成に失敗: ${(e as Error).message}`)
   } finally {
     loading.value = false
   }
