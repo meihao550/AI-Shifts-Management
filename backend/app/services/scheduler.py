@@ -274,58 +274,14 @@ class ShiftScheduler:
         for (dc, hour), req in self.staffing_rules.items():
             required_by_cat.setdefault(dc, []).append((hour, req))
 
-        # x[e, d, p] = 1 if employee e is assigned pattern p on day d
-        x: dict[tuple[int, date, int], cp_model.IntVar] = {}
-        for e in emps:
-            for d in days:
-                for p in pats:
-                    name = f"x_e{e.id}_d{d.isoformat()}_p{p.code}"
-                    x[(e.id, d, p.id)] = model.NewBoolVar(name)
+        x = self._build_vars(model, days=days, emps=emps, pats=pats)
+        self._add_unavailable(
+            model, x=x, days=days, emps=emps, pats=pats, unavailable=unavailable
+        )
 
-        # Constraint: each employee works at most one pattern per day
-        for e in emps:
-            for d in days:
-                model.Add(sum(x[(e.id, d, p.id)] for p in pats) <= 1)
-
-        # Constraint: employee cannot be assigned on unavailable days
-        for e in emps:
-            for d in days:
-                if (e.id, d) in unavailable:
-                    for p in pats:
-                        model.Add(x[(e.id, d, p.id)] == 0)
-
-        # Constraint: 確定出勤(ADR-0009)。その日は必ず1シフト入れる。対象パターン(note指定)が
-        # あれば、そのいずれかのパターンに限定する。
-        # ハード段(use_slack=False)では厳守。診断段(use_slack=True)では、物理的に不可能な
-        # ときのため強いペナルティのソフトに緩め、満たせなかった分は後で警告する。
-        mandatory_unmet_terms: list[cp_model.IntVar] = []
-        for e in emps:
-            for d in days:
-                key = (e.id, d)
-                if key not in mandatory:
-                    continue
-                codes = mandatory[key]
-                # 指定ありは選択パターン、指定なしは全パターンが対象。
-                eligible = [
-                    x[(e.id, d, p.id)]
-                    for p in pats
-                    if not codes or p.code in codes
-                ]
-                if use_slack:
-                    unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
-                    if eligible:
-                        model.Add(sum(eligible) + unmet >= 1)
-                    else:
-                        model.Add(unmet == 1)  # 該当パターン無し＝満たせない
-                    mandatory_unmet_terms.append(unmet)
-                elif eligible:
-                    model.Add(sum(eligible) == 1)
-                else:
-                    # 窓に合うパターンが無く確定出勤を満たせない → このハード段は解なしにして
-                    # 診断段へ回す（明示的な矛盾制約）。
-                    imp = model.NewBoolVar(f"mand_impossible_e{e.id}_{d.isoformat()}")
-                    model.Add(imp == 1)
-                    model.Add(imp == 0)
+        mandatory_unmet_terms = self._add_mandatory(
+            model, x=x, days=days, emps=emps, pats=pats, mandatory=mandatory, use_slack=use_slack
+        )
 
         # 廃止(ADR-0002): メインシフト区分(朝/夜/深夜)による配置固定は撤廃し、
         # 配置制御は「勤務可能時間帯」(available_start/end の1時間窓ハード, 下記)に一本化した。
@@ -342,197 +298,68 @@ class ShiftScheduler:
         # 統合した。1時間単位の窓で配置を制御しているため区別は不要。誰でも（窓に収まる限り）
         # どのパターンにも入れる。is_dual_worker は掛け持ちの目印として残すが配置には影響しない。
 
-        # Hard: 「普段入れる時間帯」を設定した従業員は、その窓に完全に収まる
-        # パターンにしか配置しない（拡張時集合の包含で判定）。
-        for e in emps:
-            if e.available_start is None or e.available_end is None:
-                continue
-            win = _window_hours(e.available_start, e.available_end)
-            for p in pats:
-                if not pat_hours[p.id] <= win:
-                    for d in days:
-                        model.Add(x[(e.id, d, p.id)] == 0)
+        self._add_availability_windows(
+            model, x=x, days=days, emps=emps, pats=pats, pat_hours=pat_hours
+        )
 
-        # Constraint: 時間カバレッジ。各日 d・各時 h で、配置人数を「必要人数 ≤ 配置 ≤ 必要人数 + α」
-        # に収める(ADR-0005)。過剰(surplus)は最大 α までハードに許し、弱ペナルティで嫌う（誰かを
-        # 働かせられる時だけ +α を使う）。use_slack 時はさらに不足(shortage)も許して人手不足を診断。
-        # 深夜跨ぎは拡張時(24=0:00, 25=1:00)で扱う。
-        shortage_terms: list[cp_model.IntVar] = []
-        surplus_terms: list[cp_model.IntVar] = []
-        # (date, hour) -> (shortage, surplus)。診断(use_slack)時の警告表示に使う。
-        slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]] = {}
-        for d in days:
-            if d in closed:
-                # 休業日(全員休み)は必要人数を課さない。全員休みと必要人数(HARD)が
-                # 矛盾して解なしになるのを防ぐ（その日は配置ゼロが正解）。
-                continue
-            day_cat = category_for(d)
-            for hour, required in required_by_cat.get(day_cat, []):
-                covering = [
-                    x[(e.id, d, p.id)]
-                    for e in emps
-                    for p in pats
-                    if hour in pat_hours[p.id]
-                ]
-                if not covering:
-                    if required > 0:
-                        warnings.append(
-                            f"{d.isoformat()} {hour}:00台: この時間をカバーするシフトパターンが無く、"
-                            f"必要人数 {required} を満たせません"
-                        )
-                    continue
-                # 過剰は最大 α（SURPLUS_TOLERANCE）まで
-                surplus = model.NewIntVar(0, SURPLUS_TOLERANCE, f"surp_{d.isoformat()}_h{hour}")
-                surplus_terms.append(surplus)
-                if use_slack:
-                    shortage = model.NewIntVar(0, required, f"short_{d.isoformat()}_h{hour}")
-                    # sum + shortage - surplus == required（不足も許容。過剰は α まで）
-                    model.Add(sum(covering) + shortage - surplus == required)
-                    shortage_terms.append(shortage)
-                    slack_vars[(d, hour)] = (shortage, surplus)
-                else:
-                    # 必要人数以上・必要人数+α 以下（不足は許さない）
-                    model.Add(sum(covering) - surplus == required)
+        shortage_terms, surplus_terms, slack_vars = self._add_coverage(
+            model,
+            x=x,
+            days=days,
+            emps=emps,
+            pats=pats,
+            pat_hours=pat_hours,
+            required_by_cat=required_by_cat,
+            closed=closed,
+            use_slack=use_slack,
+            warnings=warnings,
+        )
 
-        # Constraint: each employee target shifts per month = weekly_target * ~4.3 (rounded)
+        # 週回数の目標・保険時間・採用推奨で共有する「週グルーピング」と「上限オーバーライド」。
         max_shifts_override = {
             int(k): int(v) for k, v in self.llm.max_shifts_per_week_override.items()
         }
-        # 日曜起点で週にグルーピング（採用推奨の「対応可能数」計算に使用）
+        # 日曜起点で週にグルーピング
         weeks: dict[date, list[date]] = {}
         for d in days:
             week_start = d - timedelta(days=(d.weekday() + 1) % 7)
             weeks.setdefault(week_start, []).append(d)
 
-        # Constraint: 週回数の目標（日曜起点の週ごと。ADR-0003）。
-        # weekly_shifts_pinned な従業員は「完全な7日週でちょうど weekly 回」をハード制約に
-        # する（weekly_hard=True のときのみ。第3段フォールバックでは False で全てソフト化）。
-        # 半端な週(月末月初)は常に按分ソフト、非 pinned も常にソフト。均等化は後段の balance で。
-        penalties: list[cp_model.IntVar] = []
-        loads: list[Any] = []
-        for e in emps:
-            weekly = max_shifts_override.get(e.id, e.weekly_target)
-            # balance 用の月間ロードは従来どおり全日の合計で持つ
-            loads.append(sum(x[(e.id, d, p.id)] for d in days for p in pats))
-            for wstart, wdays in weeks.items():
-                week_total = sum(x[(e.id, d, p.id)] for d in wdays for p in pats)
-                is_full_week = len(wdays) == 7
-                if weekly_hard and e.weekly_shifts_pinned and is_full_week:
-                    # Hard: 完全週はちょうど weekly 回（絶対遵守）
-                    model.Add(week_total == weekly)
-                    continue
-                # Soft: 目標との偏差を最小化。半端な週は日数で按分する。
-                target = weekly if is_full_week else round(weekly * len(wdays) / 7)
-                over = model.NewIntVar(0, len(wdays), f"over_e{e.id}_w{wstart.isoformat()}")
-                under = model.NewIntVar(0, max(0, target), f"under_e{e.id}_w{wstart.isoformat()}")
-                model.Add(week_total - target == over - under)
-                penalties.append(over)
-                penalties.append(under)
-
-        # Constraint: 保険区分ごとの月間実働時間(分)の上下限(ADR-0006)。
-        # 上限(過労側・法令準拠)は常にハード。下限(不足側)は weekly_hard の時ハード、
-        # 他はソフト(不足分にペナルティ＋警告)にして週回数と同じくフォールバックで緩める。
-        insurance_under_terms: list[cp_model.IntVar] = []
-        total_month_minutes = sum(p.worked_minutes for p in pats) * len(days)
-        for e in emps:
-            lo_h, hi_h = INSURANCE_HOURS_BOUNDS.get(
-                e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
-            )
-            worked = sum(
-                x[(e.id, d, p.id)] * p.worked_minutes for d in days for p in pats
-            )
-            # 上限: 常にハード（雇用≤119h / なし≤79h。social は上限なし）
-            if hi_h is not None:
-                model.Add(worked <= hi_h * 60)
-            # 下限: 0 なら制約不要
-            if lo_h > 0:
-                if weekly_hard:
-                    model.Add(worked >= lo_h * 60)
-                else:
-                    # ソフト: 下限に対する不足分(分)を最小化する
-                    under_min = model.NewIntVar(0, lo_h * 60, f"ins_under_e{e.id}")
-                    over_min = model.NewIntVar(0, total_month_minutes, f"ins_over_e{e.id}")
-                    model.Add(worked - lo_h * 60 == over_min - under_min)
-                    insurance_under_terms.append(under_min)
-
-        # Hard: 連勤制限（ADR-0008）。生成月内で連続 MAX_CONSECUTIVE_DAYS+1 日すべて勤務を禁止。
-        # 各従業員・各スライディング窓で「窓内の勤務日数 ≤ MAX_CONSECUTIVE_DAYS」。
-        # x は「1日1パターン以下」制約済みなので works(e,d)=Σ_p x[e,d,p] は 0/1。
-        # 月をまたぐ連続は対象外（前月シフトは参照しない）。
-        win = MAX_CONSECUTIVE_DAYS + 1
-        if len(days) >= win:
-            for e in emps:
-                for i in range(len(days) - win + 1):
-                    window_days = days[i : i + win]
-                    model.Add(
-                        sum(x[(e.id, d, p.id)] for d in window_days for p in pats)
-                        <= MAX_CONSECUTIVE_DAYS
-                    )
-
-        # 人手不足チェック: 必要「シフト数」 > 対応可能「シフト数」 なら採用を推奨。
-        # 必要人数は時間ごと(のべ人時)なので、平均シフト長で割って「シフト数」に換算し、
-        # 従業員の対応可能シフト数(person-days)と単位を揃えて比較する。
-        avg_shift_hours = max(
-            1, round(sum(len(h) for h in pat_hours.values()) / len(pat_hours))
+        penalties, loads = self._add_weekly_targets(
+            model,
+            x=x,
+            days=days,
+            emps=emps,
+            pats=pats,
+            weeks=weeks,
+            max_shifts_override=max_shifts_override,
+            weekly_hard=weekly_hard,
         )
-        required_total = 0
-        for d in days:
-            day_person_hours = sum(req for _, req in required_by_cat.get(category_for(d), []))
-            # 切り上げ: その日のべ人時 ÷ 平均シフト長 = 必要シフト数の目安
-            required_total += (day_person_hours + avg_shift_hours - 1) // avg_shift_hours
-        capacity_total = 0
-        for e in emps:
-            weekly_cap = max_shifts_override.get(e.id, e.weekly_target)
-            for wdays in weeks.values():
-                avail = sum(1 for d in wdays if (e.id, d) not in unavailable)
-                capacity_total += min(weekly_cap, avail)
-        if required_total > capacity_total:
-            shortage_total = required_total - capacity_total
-            per_new_hire = max(1, len(weeks) * DEFAULT_NEW_HIRE_WEEKLY)
-            hire = (shortage_total + per_new_hire - 1) // per_new_hire
-            warnings.append(
-                f"人手不足の可能性: 今月の必要シフト(のべ時間) {required_total} に対し、"
-                f"従業員の対応可能数は約 {capacity_total} です。"
-                f"全ての時間を満たすには、あと約 {hire} 人の採用を検討してください。"
-            )
 
-        # Soft preference bonus。希望日に時間帯(note "HH:MM-HH:MM")があれば、
-        # その時間とパターンのカバー時間の重なり「時間数」だけ加点する（1時間単位）。
-        # 時間指定なしの希望日は従来どおりマッチ 1 件につき一律 +1。
-        bonus_terms: list[Any] = []
-        for eid, d, shift_type, pref_hours in preferred:
-            for p in pats:
-                if shift_type and p.code != shift_type and p.category != shift_type:
-                    continue
-                if (eid, d, p.id) not in x:
-                    continue
-                if pref_hours:
-                    overlap = len(pref_hours & pat_hours[p.id])
-                    if overlap == 0:
-                        continue
-                    bonus_terms.append(overlap * x[(eid, d, p.id)])
-                else:
-                    bonus_terms.append(x[(eid, d, p.id)])
+        insurance_under_terms = self._add_insurance_hours(
+            model, x=x, days=days, emps=emps, pats=pats, weekly_hard=weekly_hard
+        )
 
-        # ハード制約：禁止ペア（人間関係などによる）は時間帯が重なって同時勤務しない（H-6）。
-        # 時間カバレッジ方式では「同じ時間に両者が居ない」= 重なり禁止 で表す
-        # （非重複の別シフトなら同日でも可）。
-        active_ids = {e.id for e in emps}
-        all_hours = sorted(set().union(*pat_hours.values())) if pat_hours else []
-        for a_id, b_id in self.forbidden_pairs:
-            # 今回の対象でない従業員（退職者など）を含む組は無視する
-            if a_id not in active_ids or b_id not in active_ids:
-                continue
-            for d in days:
-                for hour in all_hours:
-                    covering_pats = [p for p in pats if hour in pat_hours[p.id]]
-                    if not covering_pats:
-                        continue
-                    model.Add(
-                        sum(x[(a_id, d, p.id)] for p in covering_pats)
-                        + sum(x[(b_id, d, p.id)] for p in covering_pats)
-                        <= 1
-                    )
+        self._add_consecutive_limit(model, x=x, days=days, emps=emps, pats=pats)
+
+        self._warn_if_understaffed(
+            days=days,
+            emps=emps,
+            weeks=weeks,
+            unavailable=unavailable,
+            required_by_cat=required_by_cat,
+            pat_hours=pat_hours,
+            max_shifts_override=max_shifts_override,
+            warnings=warnings,
+        )
+
+        bonus_terms = self._collect_preference_bonus(
+            x=x, pats=pats, pat_hours=pat_hours, preferred=preferred
+        )
+
+        self._add_forbidden_pairs(
+            model, x=x, days=days, emps=emps, pats=pats, pat_hours=pat_hours
+        )
 
         # 廃止(ADR-0002): メインシフト区分への「寄せ」ボーナスも撤廃した（配置制御は
         # 勤務可能時間帯に一本化）。挙動の由来を追えるよう、旧ロジックはコメントで残す。
@@ -673,6 +500,348 @@ class ShiftScheduler:
             solver_seconds=round(elapsed, 3),
             warnings=warnings,
         )
+
+    def _build_vars(
+        self,
+        model: cp_model.CpModel,
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+    ) -> dict[tuple[int, date, int], cp_model.IntVar]:
+        """各 (従業員, 日, パターン) の 0/1 変数 x を作り、「1日1パターン以下」を課して返す。"""
+        x: dict[tuple[int, date, int], cp_model.IntVar] = {}
+        for e in emps:
+            for d in days:
+                for p in pats:
+                    name = f"x_e{e.id}_d{d.isoformat()}_p{p.code}"
+                    x[(e.id, d, p.id)] = model.NewBoolVar(name)
+        # 各従業員は1日に最大1パターン
+        for e in emps:
+            for d in days:
+                model.Add(sum(x[(e.id, d, p.id)] for p in pats) <= 1)
+        return x
+
+    def _add_unavailable(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        unavailable: set[tuple[int, date]],
+    ) -> None:
+        """勤務不可(休日・有給・全員休み・LLM個別不可)の (従業員,日) は配置ゼロにする（ハード）。"""
+        for e in emps:
+            for d in days:
+                if (e.id, d) in unavailable:
+                    for p in pats:
+                        model.Add(x[(e.id, d, p.id)] == 0)
+
+    def _add_mandatory(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        mandatory: dict[tuple[int, date], frozenset[str]],
+        use_slack: bool,
+    ) -> list[cp_model.IntVar]:
+        """確定出勤(ADR-0009)。対象日は必ず1シフト（note指定があれば対象パターンに限定）。
+
+        ハード段(use_slack=False)では厳守。診断段(use_slack=True)では満たせない分をソフトに緩め、
+        未達変数(mandatory_unmet_terms)を返して後で警告・ペナルティに使う。
+        """
+        mandatory_unmet_terms: list[cp_model.IntVar] = []
+        for e in emps:
+            for d in days:
+                key = (e.id, d)
+                if key not in mandatory:
+                    continue
+                codes = mandatory[key]
+                # 指定ありは選択パターン、指定なしは全パターンが対象。
+                eligible = [
+                    x[(e.id, d, p.id)]
+                    for p in pats
+                    if not codes or p.code in codes
+                ]
+                if use_slack:
+                    unmet = model.NewBoolVar(f"mand_unmet_e{e.id}_{d.isoformat()}")
+                    if eligible:
+                        model.Add(sum(eligible) + unmet >= 1)
+                    else:
+                        model.Add(unmet == 1)  # 該当パターン無し＝満たせない
+                    mandatory_unmet_terms.append(unmet)
+                elif eligible:
+                    model.Add(sum(eligible) == 1)
+                else:
+                    # 窓に合うパターンが無く確定出勤を満たせない → このハード段は解なしにして
+                    # 診断段へ回す（明示的な矛盾制約）。
+                    imp = model.NewBoolVar(f"mand_impossible_e{e.id}_{d.isoformat()}")
+                    model.Add(imp == 1)
+                    model.Add(imp == 0)
+        return mandatory_unmet_terms
+
+    def _add_availability_windows(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        pat_hours: dict[int, set[int]],
+    ) -> None:
+        """「普段入れる時間帯」を持つ従業員は、その窓に完全に収まるパターンにしか配置しない（ハード）。"""
+        for e in emps:
+            if e.available_start is None or e.available_end is None:
+                continue
+            win = _window_hours(e.available_start, e.available_end)
+            for p in pats:
+                if not pat_hours[p.id] <= win:
+                    for d in days:
+                        model.Add(x[(e.id, d, p.id)] == 0)
+
+    def _add_coverage(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        pat_hours: dict[int, set[int]],
+        required_by_cat: dict[str, list[tuple[int, int]]],
+        closed: set[date],
+        use_slack: bool,
+        warnings: list[str],
+    ) -> tuple[
+        list[cp_model.IntVar],
+        list[cp_model.IntVar],
+        dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]],
+    ]:
+        """時間カバレッジ制約。各日・各時で配置人数を「必要人数 ≤ 配置 ≤ 必要人数+α」に収める(ADR-0005)。
+
+        過剰(surplus)は最大αまで。use_slack 時は不足(shortage)も許して人手不足を診断する。
+        休業日は必要人数を課さない。(shortage_terms, surplus_terms, slack_vars) を返す。
+        """
+        shortage_terms: list[cp_model.IntVar] = []
+        surplus_terms: list[cp_model.IntVar] = []
+        # (date, hour) -> (shortage, surplus)。診断(use_slack)時の警告表示に使う。
+        slack_vars: dict[tuple[date, int], tuple[cp_model.IntVar, cp_model.IntVar]] = {}
+        for d in days:
+            if d in closed:
+                # 休業日(全員休み)は必要人数を課さない。全員休みと必要人数(HARD)が
+                # 矛盾して解なしになるのを防ぐ（その日は配置ゼロが正解）。
+                continue
+            day_cat = category_for(d)
+            for hour, required in required_by_cat.get(day_cat, []):
+                covering = [
+                    x[(e.id, d, p.id)]
+                    for e in emps
+                    for p in pats
+                    if hour in pat_hours[p.id]
+                ]
+                if not covering:
+                    if required > 0:
+                        warnings.append(
+                            f"{d.isoformat()} {hour}:00台: この時間をカバーするシフトパターンが無く、"
+                            f"必要人数 {required} を満たせません"
+                        )
+                    continue
+                # 過剰は最大 α（SURPLUS_TOLERANCE）まで
+                surplus = model.NewIntVar(0, SURPLUS_TOLERANCE, f"surp_{d.isoformat()}_h{hour}")
+                surplus_terms.append(surplus)
+                if use_slack:
+                    shortage = model.NewIntVar(0, required, f"short_{d.isoformat()}_h{hour}")
+                    # sum + shortage - surplus == required（不足も許容。過剰は α まで）
+                    model.Add(sum(covering) + shortage - surplus == required)
+                    shortage_terms.append(shortage)
+                    slack_vars[(d, hour)] = (shortage, surplus)
+                else:
+                    # 必要人数以上・必要人数+α 以下（不足は許さない）
+                    model.Add(sum(covering) - surplus == required)
+        return shortage_terms, surplus_terms, slack_vars
+
+    def _add_weekly_targets(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        weeks: dict[date, list[date]],
+        max_shifts_override: dict[int, int],
+        weekly_hard: bool,
+    ) -> tuple[list[cp_model.IntVar], list[Any]]:
+        """週回数の目標（日曜起点の週ごと。ADR-0003）。
+
+        weekly_shifts_pinned な従業員は weekly_hard のとき完全週をちょうど weekly 回(ハード)。
+        それ以外は目標との偏差をソフトに最小化。偏差(penalties)と月間ロード(loads)を返す。
+        """
+        penalties: list[cp_model.IntVar] = []
+        loads: list[Any] = []
+        for e in emps:
+            weekly = max_shifts_override.get(e.id, e.weekly_target)
+            # balance 用の月間ロードは全日の合計で持つ
+            loads.append(sum(x[(e.id, d, p.id)] for d in days for p in pats))
+            for wstart, wdays in weeks.items():
+                week_total = sum(x[(e.id, d, p.id)] for d in wdays for p in pats)
+                is_full_week = len(wdays) == 7
+                if weekly_hard and e.weekly_shifts_pinned and is_full_week:
+                    # Hard: 完全週はちょうど weekly 回（絶対遵守）
+                    model.Add(week_total == weekly)
+                    continue
+                # Soft: 目標との偏差を最小化。半端な週は日数で按分する。
+                target = weekly if is_full_week else round(weekly * len(wdays) / 7)
+                over = model.NewIntVar(0, len(wdays), f"over_e{e.id}_w{wstart.isoformat()}")
+                under = model.NewIntVar(0, max(0, target), f"under_e{e.id}_w{wstart.isoformat()}")
+                model.Add(week_total - target == over - under)
+                penalties.append(over)
+                penalties.append(under)
+        return penalties, loads
+
+    def _add_insurance_hours(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        weekly_hard: bool,
+    ) -> list[cp_model.IntVar]:
+        """保険区分ごとの月間実働時間(分)の上下限(ADR-0006)。
+
+        上限は常にハード。下限は weekly_hard のときハード、そうでなければソフト（不足分の変数を
+        insurance_under_terms として返す）。
+        """
+        insurance_under_terms: list[cp_model.IntVar] = []
+        total_month_minutes = sum(p.worked_minutes for p in pats) * len(days)
+        for e in emps:
+            lo_h, hi_h = INSURANCE_HOURS_BOUNDS.get(
+                e.insurance_type, INSURANCE_HOURS_BOUNDS["none"]
+            )
+            worked = sum(
+                x[(e.id, d, p.id)] * p.worked_minutes for d in days for p in pats
+            )
+            # 上限: 常にハード（雇用≤119h / なし≤79h。social は上限なし）
+            if hi_h is not None:
+                model.Add(worked <= hi_h * 60)
+            # 下限: 0 なら制約不要
+            if lo_h > 0:
+                if weekly_hard:
+                    model.Add(worked >= lo_h * 60)
+                else:
+                    # ソフト: 下限に対する不足分(分)を最小化する
+                    under_min = model.NewIntVar(0, lo_h * 60, f"ins_under_e{e.id}")
+                    over_min = model.NewIntVar(0, total_month_minutes, f"ins_over_e{e.id}")
+                    model.Add(worked - lo_h * 60 == over_min - under_min)
+                    insurance_under_terms.append(under_min)
+        return insurance_under_terms
+
+    def _add_consecutive_limit(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+    ) -> None:
+        """連勤制限（ADR-0008）。連続 MAX_CONSECUTIVE_DAYS+1 日すべて勤務を禁止（スライディング窓）。"""
+        win = MAX_CONSECUTIVE_DAYS + 1
+        if len(days) >= win:
+            for e in emps:
+                for i in range(len(days) - win + 1):
+                    window_days = days[i : i + win]
+                    model.Add(
+                        sum(x[(e.id, d, p.id)] for d in window_days for p in pats)
+                        <= MAX_CONSECUTIVE_DAYS
+                    )
+
+    def _warn_if_understaffed(
+        self,
+        days: list[date],
+        emps: list[EmployeeSpec],
+        weeks: dict[date, list[date]],
+        unavailable: set[tuple[int, date]],
+        required_by_cat: dict[str, list[tuple[int, int]]],
+        pat_hours: dict[int, set[int]],
+        max_shifts_override: dict[int, int],
+        warnings: list[str],
+    ) -> None:
+        """必要シフト数 > 対応可能シフト数 なら、採用を推奨する警告を warnings に追加する。"""
+        avg_shift_hours = max(
+            1, round(sum(len(h) for h in pat_hours.values()) / len(pat_hours))
+        )
+        required_total = 0
+        for d in days:
+            day_person_hours = sum(req for _, req in required_by_cat.get(category_for(d), []))
+            # 切り上げ: その日のべ人時 ÷ 平均シフト長 = 必要シフト数の目安
+            required_total += (day_person_hours + avg_shift_hours - 1) // avg_shift_hours
+        capacity_total = 0
+        for e in emps:
+            weekly_cap = max_shifts_override.get(e.id, e.weekly_target)
+            for wdays in weeks.values():
+                avail = sum(1 for d in wdays if (e.id, d) not in unavailable)
+                capacity_total += min(weekly_cap, avail)
+        if required_total > capacity_total:
+            shortage_total = required_total - capacity_total
+            per_new_hire = max(1, len(weeks) * DEFAULT_NEW_HIRE_WEEKLY)
+            hire = (shortage_total + per_new_hire - 1) // per_new_hire
+            warnings.append(
+                f"人手不足の可能性: 今月の必要シフト(のべ時間) {required_total} に対し、"
+                f"従業員の対応可能数は約 {capacity_total} です。"
+                f"全ての時間を満たすには、あと約 {hire} 人の採用を検討してください。"
+            )
+
+    def _collect_preference_bonus(
+        self,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        pats: list[PatternSpec],
+        pat_hours: dict[int, set[int]],
+        preferred: list[tuple[int, date, str | None, frozenset[int]]],
+    ) -> list[Any]:
+        """希望日(preferred)への加点項を集める。時間帯指定があれば重なり時間数、無ければ +1。"""
+        bonus_terms: list[Any] = []
+        for eid, d, shift_type, pref_hours in preferred:
+            for p in pats:
+                if shift_type and p.code != shift_type and p.category != shift_type:
+                    continue
+                if (eid, d, p.id) not in x:
+                    continue
+                if pref_hours:
+                    overlap = len(pref_hours & pat_hours[p.id])
+                    if overlap == 0:
+                        continue
+                    bonus_terms.append(overlap * x[(eid, d, p.id)])
+                else:
+                    bonus_terms.append(x[(eid, d, p.id)])
+        return bonus_terms
+
+    def _add_forbidden_pairs(
+        self,
+        model: cp_model.CpModel,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        pat_hours: dict[int, set[int]],
+    ) -> None:
+        """禁止ペア(H-6)は同じ時間帯に同時勤務しない（重なり禁止。別時間帯の同日勤務は可）。"""
+        active_ids = {e.id for e in emps}
+        all_hours = sorted(set().union(*pat_hours.values())) if pat_hours else []
+        for a_id, b_id in self.forbidden_pairs:
+            # 今回の対象でない従業員（退職者など）を含む組は無視する
+            if a_id not in active_ids or b_id not in active_ids:
+                continue
+            for d in days:
+                for hour in all_hours:
+                    covering_pats = [p for p in pats if hour in pat_hours[p.id]]
+                    if not covering_pats:
+                        continue
+                    model.Add(
+                        sum(x[(a_id, d, p.id)] for p in covering_pats)
+                        + sum(x[(b_id, d, p.id)] for p in covering_pats)
+                        <= 1
+                    )
 
     def _build_objective(
         self,
