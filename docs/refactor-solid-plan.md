@@ -6,6 +6,15 @@
 
 > usage 節約のため、**この計画は新しいセッションで** 実行すること（巨大な会話履歴を引き継がない）。1ステップずつ、検証→コミットで進める。
 
+## 進捗
+- [x] **1. LLMプロバイダの戦略パターン化**（`app/services/llm.py`。`LlmProvider`/`resolve_provider`）… 完了・検証済み。
+- [x] **2. シフト生成のドメイン処理をサービスへ**（`app/services/shift_generation.py`、ルーターは委譲）… 完了・検証済み。
+- [ ] 3. `scheduler.py` の責務分割（lookups/constraints/objective）… **未着手（最注意・新セッション推奨）**。
+- [ ] 4. `ShiftTableView.vue` の composable/子コンポーネント化 … 未着手。
+- [ ] 5. `AvailabilityCalendar.vue` の CRUD を composable 化 … 未着手。
+
+> 3〜5 は差分が大きくトークン消費も大きいため、**新しいセッション**でこのファイルを起点に続ける。
+
 ## 対象と優先度（上から着手）
 
 ### 1. backend: LLM プロバイダを戦略パターンに（OCP/DIP・低リスク・まず着手）

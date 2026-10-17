@@ -47,9 +47,12 @@
 - `dev.py` … 開発専用 seed / reset（本番は 404）。
 
 ### サービス（app/services）— 業務ロジック
+- `shift_generation.py` … **シフト生成のオーケストレーション**。従業員・パターン・必要人数・希望・
+  NGペア・LLM制約を集め、ソルバーを呼び、結果を保存して返す（ルーターはこれに委譲＝SRP）。
 - `scheduler.py` … **CP-SAT スケジューラ**（`ShiftScheduler`）。必要人数・週回数・勤務可能時間帯・
   NGペア・LLM制約(全員休み/個別不可/週回数)を制約化し、3段フォールバックで解を返す。
-- `llm.py` … 自然言語メモ → JSON 制約抽出。anthropic/openai/**deepseek**(OpenAI互換)対応。失敗時は空＋警告。
+- `llm.py` … 自然言語メモ → JSON 制約抽出。プロバイダは**戦略パターン**（`LlmProvider` /
+  `resolve_provider`）で anthropic/openai/**deepseek**(OpenAI互換) を差し替え（OCP）。失敗時は空＋警告。
 - `payroll.py` … 割当から人件費算出（深夜割増・交通費・有給・保険区分）。
 - `staffing.py` … シフトパターン・時間別必要人数のデフォルト定義。
 - `seeding.py` … `seed_defaults_if_missing(db)`＝既定マスタ投入（dev/seed_prod で共有・DRY）。
