@@ -36,6 +36,7 @@ app.add_middleware(
 
 @app.get("/api/health", tags=["Health Check"])
 def health() -> dict[str, str]:
+    """ヘルスチェック。稼働確認・デプロイ後の疎通確認に使う。"""
     return {"status": "ok", "environment": settings.environment}
 
 

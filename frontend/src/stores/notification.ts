@@ -1,3 +1,4 @@
+// 通知ストア。ダッシュボード用の通知一覧を取得して保持する。
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { api } from '@/api/client'
 import type { AppNotification } from '@/types'

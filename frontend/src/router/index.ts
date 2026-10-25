@@ -1,3 +1,4 @@
+// ルーティング定義と認証/管理者ガード（未ログインは /login、管理者専用は /mypage へ）。
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 

@@ -1,3 +1,4 @@
+// テーマ(ライト/ダーク)ストア。モードの保持・localStorage 保存・html.dark 適用・トグル。
 import { defineStore } from 'pinia'
 
 export type ThemeMode = 'light' | 'dark'

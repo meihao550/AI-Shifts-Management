@@ -1,18 +1,27 @@
-"""LLM integration — converts a natural-language monthly note into structured constraints.
+"""LLM 連携：自然言語の「今月の事情」→ 構造化された制約(JSON)。
 
-Supports Anthropic Claude, OpenAI, and DeepSeek. Selected via `LLM_PROVIDER`.
-DeepSeek は OpenAI 互換 API のため、openai ライブラリの base_url を差し替えて呼ぶ。
+プロバイダ(anthropic / openai / deepseek)は **戦略(Strategy)** として差し替え可能にしてある。
+新しいプロバイダを足すときは `resolve_provider` に分岐を1つ追加するだけでよい（開放/閉鎖原則 OCP）。
+DeepSeek は OpenAI 互換 API のため、`OpenAICompatProvider` を base_url 違いで共用する。
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Protocol
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+# 外部APIがハングして生成リクエスト全体(Cloud Run 300秒上限)を巻き込まないための共通設定。
+_TIMEOUT_SECONDS = 20.0
+_MAX_RETRIES = 0
+# 未設定/失敗時に制約を無視したことを知らせる警告文（複数箇所で同一文言を使う）。
+_FALLBACK_WARNING = (
+    "LLM が設定されていない、または呼び出しに失敗したため自然言語制約は無視されました"
+)
 
 SYSTEM_PROMPT = """あなたはシフトスケジューリングの制約抽出アシスタントです。
 ユーザから与えられる自然言語の「今月の事情」を読み、以下の JSON スキーマに
@@ -42,23 +51,115 @@ SYSTEM_PROMPT = """あなたはシフトスケジューリングの制約抽出�
 """
 
 
-async def derive_constraints_from_text(
-    note: str,
-    employees_hint: list[dict[str, Any]],
-    year: int,
-    month: int,
-) -> dict[str, Any]:
-    """Return an object matching the schema. Never raises; returns empty on failure."""
+class LlmProvider(Protocol):
+    """1回の LLM 呼び出し戦略。system/user プロンプトを渡し、生の応答テキストを返す。"""
 
-    settings = get_settings()
-    empty: dict[str, Any] = {
+    async def complete(self, system: str, user: str) -> str:
+        """system/user プロンプトを LLM に送り、生の応答テキストを返す。"""
+        ...
+
+
+class AnthropicProvider:
+    """Anthropic Claude を呼ぶプロバイダ。"""
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self._api_key = api_key
+        self._model = model
+
+    async def complete(self, system: str, user: str) -> str:
+        """Claude にプロンプトを投げ、テキストブロックを連結して返す。"""
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(
+            api_key=self._api_key, timeout=_TIMEOUT_SECONDS, max_retries=_MAX_RETRIES
+        )
+        message = await client.messages.create(
+            model=self._model,
+            max_tokens=1500,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return "".join(
+            block.text for block in message.content if getattr(block, "type", "") == "text"
+        )
+
+
+class OpenAICompatProvider:
+    """OpenAI 互換 API を呼ぶプロバイダ。base_url を変えれば DeepSeek 等にも向く。"""
+
+    def __init__(self, api_key: str, model: str, base_url: str | None = None) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._base_url = base_url
+
+    async def complete(self, system: str, user: str) -> str:
+        """chat.completions に JSON 強制で投げ、本文テキストを返す。"""
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=_TIMEOUT_SECONDS,
+            max_retries=_MAX_RETRIES,
+        )
+        resp = await client.chat.completions.create(
+            model=self._model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return resp.choices[0].message.content or "{}"
+
+
+def resolve_provider(settings: Settings) -> LlmProvider | None:
+    """設定(LLM_PROVIDER＋対応するAPIキー)から使うプロバイダを1つ返す。無効なら None。
+
+    新しいプロバイダはここに分岐を1つ追加するだけで対応できる（OCP）。
+    """
+    provider = settings.llm_provider
+    if provider == "anthropic" and settings.anthropic_api_key:
+        return AnthropicProvider(settings.anthropic_api_key, settings.anthropic_model)
+    if provider == "openai" and settings.openai_api_key:
+        return OpenAICompatProvider(settings.openai_api_key, settings.openai_model)
+    if provider == "deepseek" and settings.deepseek_api_key:
+        # DeepSeek は OpenAI 互換。base_url を差し替えるだけで同じ呼び出し経路を使う。
+        return OpenAICompatProvider(
+            settings.deepseek_api_key, settings.deepseek_model, settings.deepseek_base_url
+        )
+    return None
+
+
+def _empty_result() -> dict[str, Any]:
+    """スキーマに一致する空の制約オブジェクトを返す。"""
+    return {
         "closed_dates": [],
         "hard_unavailable": [],
         "max_shifts_per_week_override": {},
         "date_notes": {},
         "warnings": [],
     }
+
+
+async def derive_constraints_from_text(
+    note: str,
+    employees_hint: list[dict[str, Any]],
+    year: int,
+    month: int,
+) -> dict[str, Any]:
+    """自然言語メモをスキーマ準拠の JSON 制約へ変換する。
+
+    例外は投げず、プロバイダ未設定や呼び出し失敗のときは空の制約＋警告を返す
+    （生成処理は止めない）。
+    """
+    empty = _empty_result()
     if not note or not note.strip():
+        return empty
+
+    provider = resolve_provider(get_settings())
+    if provider is None:
+        empty["warnings"].append(_FALLBACK_WARNING)
         return empty
 
     user_prompt = json.dumps(
@@ -70,63 +171,16 @@ async def derive_constraints_from_text(
         },
         ensure_ascii=False,
     )
-
     try:
-        if settings.llm_provider == "anthropic" and settings.anthropic_api_key:
-            return await _call_anthropic(user_prompt, settings.anthropic_api_key, settings.anthropic_model)
-        if settings.llm_provider == "openai" and settings.openai_api_key:
-            return await _call_openai(user_prompt, settings.openai_api_key, settings.openai_model)
-        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-            # DeepSeek は OpenAI 互換。base_url を差し替えるだけで同じ呼び出し経路を使う。
-            return await _call_openai(
-                user_prompt,
-                settings.deepseek_api_key,
-                settings.deepseek_model,
-                base_url=settings.deepseek_base_url,
-            )
+        return _parse_json(await provider.complete(SYSTEM_PROMPT, user_prompt))
     except Exception:
         logger.exception("LLM call failed; falling back to empty constraints")
-
-    empty["warnings"].append(
-        "LLM が設定されていない、または呼び出しに失敗したため自然言語制約は無視されました"
-    )
-    return empty
-
-
-async def _call_anthropic(user_prompt: str, api_key: str, model: str) -> dict[str, Any]:
-    import anthropic
-
-    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=20.0, max_retries=0)
-    message = await client.messages.create(
-        model=model,
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
-    return _parse_json(text)
-
-
-async def _call_openai(
-    user_prompt: str, api_key: str, model: str, base_url: str | None = None
-) -> dict[str, Any]:
-    from openai import AsyncOpenAI
-
-    # base_url を渡すと DeepSeek 等の OpenAI 互換エンドポイントに向く（省略時は OpenAI 本家）。
-    # timeout/max_retries を明示：既定(600秒+リトライ)だと外部APIが遅いとき生成全体がハングするため。
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=20.0, max_retries=0)
-    resp = await client.chat.completions.create(
-        model=model,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    return _parse_json(resp.choices[0].message.content or "{}")
+        empty["warnings"].append(_FALLBACK_WARNING)
+        return empty
 
 
 def _parse_json(text: str) -> dict[str, Any]:
+    """LLM 応答テキストを JSON として読み込む（```コードフェンスが付いていれば除去）。"""
     text = text.strip()
     # trim markdown code fences if present
     if text.startswith("```"):

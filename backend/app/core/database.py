@@ -23,6 +23,7 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
+    """リクエストごとに DB セッションを開き、終了時に必ず閉じる（FastAPI 依存性）。"""
     db = SessionLocal()
     try:
         yield db
