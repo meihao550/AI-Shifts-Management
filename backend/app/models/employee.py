@@ -86,6 +86,9 @@ class Employee(Base):
     assignments: Mapped[list[ShiftAssignment]] = relationship(  # noqa: F821
         "ShiftAssignment",
         back_populates="employee",
+        # 削除は DB の ON DELETE CASCADE に任せる。これが無いと db.delete(employee) 時に
+        # SQLAlchemy が shift_assignments.employee_id を NULL にしようとして NOT NULL 違反になる。
+        passive_deletes=True,
     )
 
 
