@@ -320,7 +320,7 @@ function goPrint() {
       </NCollapse>
     </template>
 
-    <NDivider dashed title-placement="left">{{ auth.isAdmin ? 'シフト表（セルをクリックで編集）' : 'シフト表' }}</NDivider>
+    <NDivider dashed title-placement="left">シフト表</NDivider>
     <!-- シフト生成ボタンはシフト表見出しの直下に配置（管理者のみ）。 -->
     <div v-if="auth.isAdmin" class="gen-actions">
       <NButton type="primary" :loading="shiftStore.generating" class="generate-btn" @click="generate">
