@@ -51,6 +51,11 @@ class CoverageOutcome(Base):
     filled: Mapped[int] = mapped_column(Integer, nullable=False)
     # 不足 = max(required − filled, 0)。保存時に確定させて入れる（集計の高速化）。
     shortage: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 容量特徴（ML特徴量）: 生成時点の有効従業員数と、このスロットの時間に入れる従業員数。
+    # 「勤務可能時間帯(available_start/end)の窓にこの時間が入る」かつ「その日が勤務不可でない」人数。
+    # need に対して available が足りないほど不足が起きやすい、という関係を学習させる。
+    active_employees: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    available_employees: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
