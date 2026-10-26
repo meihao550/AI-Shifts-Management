@@ -66,6 +66,8 @@ def _persist_coverage(db: Session, shift: Shift, coverage: list[CoverageSlot]) -
                 required=c.required,
                 filled=c.filled,
                 shortage=max(c.required - c.filled, 0),
+                active_employees=c.active_employees,
+                available_employees=c.available_employees,
             )
         )
 
