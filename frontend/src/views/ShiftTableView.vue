@@ -25,7 +25,7 @@ import type { Availability, AvailabilityKind, ShiftAssignment } from '@/types'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar.vue'
 import { isoDate } from '@/utils/date'
 import { useShiftGrid } from '@/composables/useShiftGrid'
-import { useShortfalls } from '@/composables/useShortfalls'
+import { useShortfalls, type Shortfall } from '@/composables/useShortfalls'
 import { useShiftGeneration } from '@/composables/useShiftGeneration'
 
 // セル編集で「有給」を表すための特別な選択値
@@ -138,6 +138,41 @@ const shortfalls = useShortfalls({
   days,
   draft,
   hourlyStaffing: () => ruleStore.hourlyStaffing,
+})
+
+// 不足の表示を「日ごとに1行・連続する時間帯(同じ過不足)はまとめて範囲」にして見やすくする。
+// 例: 4日の1〜8時が 0/1人 なら「4日 1〜8時 0/1人」。日が変わると改行（=別の行）。
+const shortfallLines = computed(() => {
+  const byDay = new Map<number, Shortfall[]>()
+  for (const s of shortfalls.value) {
+    const arr = byDay.get(s.day) ?? []
+    arr.push(s)
+    byDay.set(s.day, arr)
+  }
+  const lines: { day: number; text: string }[] = []
+  for (const day of [...byDay.keys()].sort((a, b) => a - b)) {
+    const items = byDay.get(day)!.sort((a, b) => a.hour - b.hour)
+    const parts: string[] = []
+    let i = 0
+    while (i < items.length) {
+      let j = i
+      // 連続する時間帯で過不足(have/need)が同じものをひとまとめにする
+      while (
+        j + 1 < items.length &&
+        items[j + 1].hour === items[j].hour + 1 &&
+        items[j + 1].have === items[i].have &&
+        items[j + 1].need === items[i].need
+      ) {
+        j++
+      }
+      const a = items[i]
+      const label = i === j ? `${a.hour}時` : `${a.hour}〜${items[j].hour}時`
+      parts.push(`${label} ${a.have}/${a.need}人`)
+      i = j + 1
+    }
+    lines.push({ day, text: `${day}日 ${parts.join('、')}` })
+  }
+  return lines
 })
 
 // ---- セル編集 --------------------------------------------------------------
@@ -341,9 +376,9 @@ function goPrint() {
         <NAlert v-if="shortfalls.length && auth.isAdmin" type="warning" title="人数が規定に足りていません"
           style="margin-bottom: 12px">
           <div class="shortfall-list">
-            <span v-for="(s, i) in shortfalls" :key="i" class="shortfall-item">
-              {{ s.day }}日 {{ s.hour }}:00台 {{ s.have }}/{{ s.need }}人
-            </span>
+            <div v-for="line in shortfallLines" :key="line.day" class="shortfall-line">
+              {{ line.text }}
+            </div>
           </div>
           <p class="shortfall-note">
             ※土日は休日扱いで判定しています（祝日は未考慮）。セルを編集して「反映」すると自動保存されます。
@@ -580,16 +615,16 @@ function goPrint() {
 }
 
 .shortfall-list {
-  max-height: 120px;
+  max-height: 160px;
   overflow: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 2px;
   font-size: 12px;
 }
 
-.shortfall-item {
-  white-space: nowrap;
+.shortfall-line {
+  line-height: 1.6;
 }
 
 .shortfall-note {
