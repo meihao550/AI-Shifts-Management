@@ -70,6 +70,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '人件費計算', adminOnly: true },
   },
   {
+    path: '/analytics',
+    name: 'analytics',
+    component: () => import('@/views/ShortageAnalyticsView.vue'),
+    meta: { title: '人手不足分析', adminOnly: true },
+  },
+  {
     path: '/employees/:employeeId/calendar',
     name: 'employee-calendar',
     component: () => import('@/views/EmployeeCalendarView.vue'),
