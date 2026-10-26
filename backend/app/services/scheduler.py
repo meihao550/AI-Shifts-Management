@@ -117,11 +117,24 @@ class LLMConstraints:
 
 
 @dataclass
+class CoverageSlot:
+    """ある (日・拡張時) の必要人数と実配置人数。人手不足の履歴/分析の記録に使う。"""
+
+    target_date: date
+    hour: int
+    required: int
+    filled: int
+    day_category: str  # "weekday" | "weekend_or_holiday"
+
+
+@dataclass
 class SchedulerResult:
     assignments: list[dict[str, Any]]
     solver_status: str
     solver_seconds: float
     warnings: list[str]
+    # 解から集計した (日・拡張時) ごとの必要人数と実配置人数。人手不足の履歴/分析に使う。
+    coverage: list[CoverageSlot] = field(default_factory=list)
 
 
 class ShiftScheduler:
@@ -401,7 +414,7 @@ class ShiftScheduler:
         status = solver.Solve(model)
         elapsed = _time.time() - started
 
-        return self._extract_result(
+        result = self._extract_result(
             solver=solver,
             status=status,
             elapsed=elapsed,
@@ -414,6 +427,19 @@ class ShiftScheduler:
             mandatory=mandatory,
             warnings=warnings,
         )
+        # 解があるときだけ、各(日・時)の必要人数と実配置人数を集計して添える（履歴/分析用）。
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            result.coverage = self._collect_coverage(
+                solver=solver,
+                x=x,
+                days=days,
+                emps=emps,
+                pats=pats,
+                pat_hours=pat_hours,
+                required_by_cat=required_by_cat,
+                closed=closed,
+            )
+        return result
 
     def _extract_result(
         self,
@@ -500,6 +526,46 @@ class ShiftScheduler:
             solver_seconds=round(elapsed, 3),
             warnings=warnings,
         )
+
+    @staticmethod
+    def _collect_coverage(
+        solver: cp_model.CpSolver,
+        x: dict[tuple[int, date, int], cp_model.IntVar],
+        days: list[date],
+        emps: list[EmployeeSpec],
+        pats: list[PatternSpec],
+        pat_hours: dict[int, set[int]],
+        required_by_cat: dict[str, list[tuple[int, int]]],
+        closed: set[date],
+    ) -> list[CoverageSlot]:
+        """解から各 (日・拡張時) の必要人数と実配置人数を集計する（人手不足の履歴/分析用）。
+
+        _add_coverage と同じ required_by_cat / pat_hours を使い、配置人数は解の x から数える。
+        深夜跨ぎ・拡張時軸の扱いを二重実装しないため、カバレッジ計算はここに一元化する。
+        休業日(closed)はその日に必要人数を課さないので記録しない。
+        """
+        out: list[CoverageSlot] = []
+        for d in days:
+            if d in closed:
+                continue
+            day_cat = category_for(d)
+            for hour, required in required_by_cat.get(day_cat, []):
+                filled = sum(
+                    int(solver.Value(x[(e.id, d, p.id)]))
+                    for e in emps
+                    for p in pats
+                    if hour in pat_hours[p.id]
+                )
+                out.append(
+                    CoverageSlot(
+                        target_date=d,
+                        hour=hour,
+                        required=required,
+                        filled=filled,
+                        day_category=day_cat,
+                    )
+                )
+        return out
 
     def _build_vars(
         self,
