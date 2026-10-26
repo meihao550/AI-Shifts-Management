@@ -1,5 +1,6 @@
 """SQLAlchemy models."""
 
+from app.models.coverage_outcome import CoverageOutcome
 from app.models.employee import Employee, EmployeeAvailability
 from app.models.pair import EmployeePairConstraint
 from app.models.rule import HourlyStaffingRule, ShiftPattern
@@ -15,4 +16,5 @@ __all__ = [
     "ShiftPattern",
     "HourlyStaffingRule",
     "EmployeePairConstraint",
+    "CoverageOutcome",
 ]
