@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from datetime import time
 
-from app.models.rule import DayCategory
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.rule import DayCategory, HourlyStaffingRule
 
 
 def make_pattern_code(start: time, end: time) -> str:
@@ -126,3 +129,17 @@ def default_hourly_rules() -> list[dict]:
     add(DayCategory.weekend_or_holiday, range(18, 25), 3)  # 18-24時が夜ピーク +1 → 18-1(W)
 
     return rules
+
+
+def load_staffing_map(db: Session) -> dict[tuple[str, int], int]:
+    """(day_category, hour) → 必要人数 のマップをDBから読み込む。未登録ならデフォルトを返す。
+
+    シフト生成・人手不足予測で必要人数を参照する箇所が共有する（DRY）。
+    """
+    rows = list(db.execute(select(HourlyStaffingRule)).scalars())
+    if rows:
+        return {(r.day_category.value, r.hour): r.required for r in rows}
+    return {
+        (r["day_category"].value, r["hour"]): r["required"]
+        for r in default_hourly_rules()
+    }

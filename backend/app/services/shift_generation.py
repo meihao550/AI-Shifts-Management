@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.coverage_outcome import CoverageOutcome
 from app.models.employee import Employee, EmployeeAvailability
 from app.models.pair import EmployeePairConstraint
-from app.models.rule import HourlyStaffingRule, ShiftPattern
+from app.models.rule import ShiftPattern
 from app.models.shift import Shift, ShiftAssignment, ShiftStatus
 from app.schemas.shift import (
     ShiftAssignmentRead,
@@ -30,7 +30,7 @@ from app.services.scheduler import (
     ShiftScheduler,
     worked_minutes_of,
 )
-from app.services.staffing import default_hourly_rules, default_patterns
+from app.services.staffing import default_patterns, load_staffing_map
 
 
 def _get_or_create_shift(db: Session, year: int, month: int) -> Shift:
@@ -90,16 +90,8 @@ async def generate(db: Session, payload: ShiftGenerateRequest) -> ShiftGenerateR
         db.commit()
         patterns = list(db.execute(select(ShiftPattern)).scalars())
 
-    staffing_rows = list(db.execute(select(HourlyStaffingRule)).scalars())
-    staffing_map: dict[tuple[str, int], int] = {
-        (r.day_category.value, r.hour): r.required for r in staffing_rows
-    }
-    if not staffing_map:
-        # 時間別必要人数のデフォルト（時間カバレッジ方式）
-        staffing_map = {
-            (r["day_category"].value, r["hour"]): r["required"]
-            for r in default_hourly_rules()
-        }
+    # 時間別必要人数（未登録ならデフォルト）。予測側と共有のヘルパーで読む（DRY）。
+    staffing_map = load_staffing_map(db)
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
 
