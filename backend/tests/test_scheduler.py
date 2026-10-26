@@ -126,6 +126,9 @@ def test_result_includes_coverage():
     assert all(0 <= c.filled <= c.required for c in morning_slots)
     # 少なくとも一部の時間帯は満たせている（実際に配置が行われている）
     assert any(c.filled == 2 for c in morning_slots)
+    # 容量特徴: 2人体制・勤務可能時間帯の制限なし・勤務不可なし → active も available も 2
+    assert all(c.active_employees == 2 for c in morning_slots)
+    assert all(c.available_employees == 2 for c in morning_slots)
 
 
 def test_closed_date_forces_everyone_off():
