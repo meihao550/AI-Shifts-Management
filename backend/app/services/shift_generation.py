@@ -9,25 +9,28 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.coverage_outcome import CoverageOutcome
 from app.models.employee import Employee, EmployeeAvailability
 from app.models.pair import EmployeePairConstraint
-from app.models.rule import HourlyStaffingRule, ShiftPattern
+from app.models.rule import ShiftPattern
 from app.models.shift import Shift, ShiftAssignment, ShiftStatus
 from app.schemas.shift import (
     ShiftAssignmentRead,
     ShiftGenerateRequest,
     ShiftGenerateResult,
 )
+from app.services.holidays import is_holiday
 from app.services.llm import derive_constraints_from_text
 from app.services.scheduler import (
     AvailabilitySpec,
+    CoverageSlot,
     EmployeeSpec,
     LLMConstraints,
     PatternSpec,
     ShiftScheduler,
     worked_minutes_of,
 )
-from app.services.staffing import default_hourly_rules, default_patterns
+from app.services.staffing import default_patterns, load_staffing_map
 
 
 def _get_or_create_shift(db: Session, year: int, month: int) -> Shift:
@@ -41,6 +44,32 @@ def _get_or_create_shift(db: Session, year: int, month: int) -> Shift:
         db.commit()
         db.refresh(shift)
     return shift
+
+
+def _persist_coverage(db: Session, shift: Shift, coverage: list[CoverageSlot]) -> None:
+    """人手不足の履歴(CoverageOutcome)を当該シフト分だけ置き換える（月ごと1スナップショット）。
+
+    再生成のたびに当該 shift_id の行を全削除し、最新の解のカバレッジを入れ直す（assignments と同方針）。
+    履歴は「別の月のスナップショットが溜まること」で蓄積され、集計/人手不足予測(ML)の学習データになる。
+    weekday・is_holiday は分析/特徴量用に日付から派生させて保存する。
+    """
+    db.query(CoverageOutcome).filter(CoverageOutcome.shift_id == shift.id).delete()
+    for c in coverage:
+        db.add(
+            CoverageOutcome(
+                shift_id=shift.id,
+                target_date=c.target_date,
+                hour=c.hour,
+                day_category=c.day_category,
+                weekday=c.target_date.weekday(),
+                is_holiday=is_holiday(c.target_date),
+                required=c.required,
+                filled=c.filled,
+                shortage=max(c.required - c.filled, 0),
+                active_employees=c.active_employees,
+                available_employees=c.available_employees,
+            )
+        )
 
 
 async def generate(db: Session, payload: ShiftGenerateRequest) -> ShiftGenerateResult:
@@ -63,16 +92,8 @@ async def generate(db: Session, payload: ShiftGenerateRequest) -> ShiftGenerateR
         db.commit()
         patterns = list(db.execute(select(ShiftPattern)).scalars())
 
-    staffing_rows = list(db.execute(select(HourlyStaffingRule)).scalars())
-    staffing_map: dict[tuple[str, int], int] = {
-        (r.day_category.value, r.hour): r.required for r in staffing_rows
-    }
-    if not staffing_map:
-        # 時間別必要人数のデフォルト（時間カバレッジ方式）
-        staffing_map = {
-            (r["day_category"].value, r["hour"]): r["required"]
-            for r in default_hourly_rules()
-        }
+    # 時間別必要人数（未登録ならデフォルト）。予測側と共有のヘルパーで読む（DRY）。
+    staffing_map = load_staffing_map(db)
 
     availability_rows = list(db.execute(select(EmployeeAvailability)).scalars())
 
@@ -166,6 +187,8 @@ async def generate(db: Session, payload: ShiftGenerateRequest) -> ShiftGenerateR
     db.query(ShiftAssignment).filter(ShiftAssignment.shift_id == shift.id).delete()
     for a in result.assignments:
         db.add(ShiftAssignment(shift_id=shift.id, **a))
+    # 人手不足の履歴を更新（集計/ML学習データ。assignments と同じコミットで原子的に）。
+    _persist_coverage(db, shift, result.coverage)
     shift.note = payload.natural_language_note
     db.commit()
 

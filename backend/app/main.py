@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.routers import (
     allowed_logins,
+    analytics,
     auth,
     dev,
     employees,
@@ -49,3 +50,4 @@ app.include_router(dev.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(pairs.router, prefix="/api")
 app.include_router(allowed_logins.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")

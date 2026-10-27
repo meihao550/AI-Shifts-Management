@@ -110,6 +110,27 @@ def test_each_hour_meets_required_exactly():
             assert n == 2
 
 
+def test_result_includes_coverage():
+    """解には各(日・拡張時)の必要人数と実配置人数が coverage として載る（履歴/分析用）。"""
+    result = _make_scheduler(
+        patterns=[MORNING],
+        staffing_rules=_hourly((MORNING_HOURS, 2)),
+    ).solve()
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.coverage, "coverage が空であってはならない"
+    # 休業日なし・朝(9-16=8時間)×2月28日ぶんのスロットが揃う
+    assert len(result.coverage) == 28 * len(MORNING_HOURS)
+    morning_slots = [c for c in result.coverage if c.hour in MORNING_HOURS]
+    # 必要人数は 2、実配置は 0〜必要人数の範囲（連勤上限で2人では全日は埋まらない）
+    assert all(c.required == 2 for c in morning_slots)
+    assert all(0 <= c.filled <= c.required for c in morning_slots)
+    # 少なくとも一部の時間帯は満たせている（実際に配置が行われている）
+    assert any(c.filled == 2 for c in morning_slots)
+    # 容量特徴: 2人体制・勤務可能時間帯の制限なし・勤務不可なし → active も available も 2
+    assert all(c.active_employees == 2 for c in morning_slots)
+    assert all(c.available_employees == 2 for c in morning_slots)
+
+
 def test_closed_date_forces_everyone_off():
     """LLM の closed_dates(全員休み)はハード制約。その日は誰も配置されない。"""
     scheduler = ShiftScheduler(

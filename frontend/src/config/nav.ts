@@ -8,6 +8,7 @@ import payrollIcon from '@/assets/nav/payroll.png'
 import employeesIcon from '@/assets/nav/employees.png'
 import rulesIcon from '@/assets/nav/rules.png'
 import loginUsersIcon from '@/assets/nav/login-users.png'
+import analyticsIcon from '@/assets/nav/analytics.png'
 
 export interface NavItem {
   key: string
@@ -26,4 +27,5 @@ export const navItems: NavItem[] = [
   { key: 'employees', label: '従業員管理', to: '/employees', icon: employeesIcon, adminOnly: true },
   { key: 'rules', label: 'ルール設定', to: '/rules', icon: rulesIcon, adminOnly: true },
   { key: 'login-users', label: 'ログイン管理', to: '/login-users', icon: loginUsersIcon, adminOnly: true },
+  { key: 'analytics', label: '人手不足分析', to: '/analytics', icon: analyticsIcon, adminOnly: true },
 ]
